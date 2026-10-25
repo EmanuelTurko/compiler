@@ -1,3 +1,3 @@
-let x = 7;
+let x = 1+2+5;
 let y = 8;
-exit(y);
+exit(x);
