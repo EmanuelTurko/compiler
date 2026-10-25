@@ -25,7 +25,7 @@ int main(int argc, char* argv[])
         contentsStream << input.rdbuf();
         contents = contentsStream.str();
     }
-    Tokenizer tokenizer(std::move(contents));
+    Tokenizer tokenizer(contents);
     auto tokens = tokenizer.tokenize();
 
     Parser parser(std::move(tokens));
@@ -35,9 +35,8 @@ int main(int argc, char* argv[])
         std::cerr << "Invalid program" << std::endl;
         exit(EXIT_FAILURE);
     }
-
-    Generator generator(program.value());
     {
+        Generator generator(std::move(program.value()));
         std::fstream file("out.asm", std::ios::out);
         file << generator.generateProgram();
     }
