@@ -1,0 +1,10 @@
+# build output
+cmake-build-*/
+build/
+# compiler output
+out
+out.o
+out.asm
+*.o
+# CLion
+.idea/
