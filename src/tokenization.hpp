@@ -20,8 +20,34 @@ enum class TokenType {
     let,
     eq,
     plus,
+    mul,
+    sub,
+    div
 };
+inline auto isBinOp(const TokenType& type) ->bool {
+    switch (type) {
+        case TokenType::plus:
+        case TokenType::mul:
+        case TokenType::sub:
+        case TokenType::div:
+            return true;
+        default:
+            return false;
+    }
+}
 
+inline auto binPrecedence(const TokenType &type) -> std::optional<int> {
+    switch (type) {
+        case TokenType::plus:
+        case TokenType::sub:
+            return 0;
+        case TokenType::mul:
+        case TokenType::div:
+            return 1;
+        default:
+            return std::nullopt;
+    }
+}
 struct Token {
     TokenType type{};
     std::optional<std::string> value{};
@@ -39,65 +65,87 @@ public:
 
 private:
     [[nodiscard]] auto peek(size_t offset = 0) const -> std::optional<char>;
-
+    [[nodiscard]] auto tokenizeWord() -> Token;
+    [[nodiscard]] auto tokenizeNum() -> Token;
+    auto tokenizeSymbol(std::vector<Token>& tokens) -> void;
     const std::string _src;
     size_t _index;
 };
 
-inline auto Tokenizer::consume() -> char { return _src[_index++]; }
+inline auto Tokenizer::consume() -> char {
+    return _src[_index++];
+}
 
 inline auto Tokenizer::peek(const size_t offset) const -> std::optional<char> {
     if (_index + offset >= _src.size()) return std::nullopt;
     return _src[_index + offset];
 }
 
-inline auto Tokenizer::tokenize() -> std::vector<Token> {
-    std::vector<Token> tokens{};
+inline auto Tokenizer::tokenizeNum() -> Token {
     std::string buf{};
 
-    while (peek().has_value()) {
-        if (isalpha(peek().value())) {
-            buf.push_back(consume());
-            while (peek().has_value() && isalnum(peek().value())) { buf.push_back(consume()); }
-            if (buf == "exit") {
-                tokens.push_back({.type = TokenType::exit});
-                buf.clear();
-                continue;
-            }
-            else if (buf == "let") {
-                tokens.push_back({.type = TokenType::let});
-                buf.clear();
-                continue;
-            }
-            else {
-                tokens.push_back({.type = TokenType::ident, .value = buf});
-                buf.clear();
-            }
-        }if (isdigit(peek().value())) {
-            buf.push_back(consume());
-            while (peek().has_value() && isdigit(peek().value())) { buf.push_back(consume()); }
-            tokens.push_back({.type = TokenType::intLit, .value = buf});
-            buf.clear();
-        } else if (peek().value() == '(') {
-            consume();
-            tokens.push_back({.type = TokenType::openParen});
-        } else if (peek().value() == ')') {
-            consume();
-            tokens.push_back({.type = TokenType::closeParen});
-        } else if (peek().value() == ';') {
-            tokens.push_back({.type = TokenType::semi});
-            consume();
-        } else if (peek().value() == '=') {
-            tokens.push_back({.type = TokenType::eq});
-            consume();
-        } else if (peek().value() == '+'){
-            tokens.push_back({.type = TokenType::plus});
-            consume();
-        } else if (isspace(
-            peek().value())) { consume(); } else {
-            std::cerr << "You messed up!" << std::endl;
+    while (peek().has_value() && isdigit(peek().value()))
+        buf.push_back(consume());
+    return {.type = TokenType::intLit, .value = buf};
+}
+
+inline auto Tokenizer::tokenizeWord() -> Token {
+    std::string buf{};
+
+    while (peek().has_value() && isalnum(peek().value()))
+        buf.push_back(consume());
+    if (buf == "exit") return {.type = TokenType::exit};
+    if (buf == "let") return {.type = TokenType::let};
+    return {.type = TokenType::ident, .value = buf};
+}
+
+inline auto Tokenizer::tokenizeSymbol(std::vector<Token> &tokens) -> void {
+    switch (peek().value()) {
+        case '(': tokens.push_back({.type = TokenType::openParen});
+            break;
+        case ')': tokens.push_back({.type = TokenType::closeParen});
+            break;
+        /*case '{': tokens.push_back({.type = TokenType::openBrace});
+            break;
+        case '}': tokens.push_back({.type = TokenType::closeBrace});
+            break;
+        case '[': tokens.push_back({.type = TokenType::openSquare});
+            break;
+        case ']': tokens.push_back({.type = TokenType::closeSquare});
+            break;*/
+        case ';': tokens.push_back({.type = TokenType::semi});
+            break;
+        case '=': tokens.push_back({.type = TokenType::eq});
+            break;
+        case '+': tokens.push_back({.type = TokenType::plus});
+            break;
+        case '*': tokens.push_back({.type = TokenType::mul});
+            break;
+        case '-': tokens.push_back({.type = TokenType::sub});
+            break;
+        case '/': tokens.push_back({.type = TokenType::div});
+            break;
+        case ' ':
+        case '\n':
+        case '\t':
+        case '\r': break;
+        default:
+            std::cerr << "Unexpected symbol: " << peek().value() << std::endl;
             exit(EXIT_FAILURE);
-        }
+    }
+    consume();
+}
+
+inline auto Tokenizer::tokenize() -> std::vector<Token> {
+    std::vector<Token> tokens{};
+
+    while (peek().has_value()) {
+        if (isalpha(peek().value()))
+            tokens.push_back(tokenizeWord());
+        else if (isdigit(peek().value()))
+            tokens.push_back(tokenizeNum());
+        else
+            tokenizeSymbol(tokens);
     }
     _index = 0;
     return tokens;

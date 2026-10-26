@@ -11,6 +11,8 @@ public:
     explicit Generator(node::Program program) : _program(std::move(program)) {
     }
 
+    auto generateBinExpr(const node::BinExpr &binExpr);
+
     auto generateTerm(const node::Term &term) -> void;
 
     auto generateExpr(const node::Expr &expr) -> void;
@@ -33,6 +35,50 @@ private:
     size_t _stackSize{};
     std::unordered_map<std::string, Var> _vars{};
 };
+
+inline auto Generator::generateBinExpr(const node::BinExpr &binExpr) {
+    struct BinExprVisitor {
+        Generator *gen;
+
+        auto operator()(const node::BinExprAdd &binExprAdd) const -> void {
+            gen->generateExpr(*binExprAdd.rhs);
+            gen->generateExpr(*binExprAdd.lhs);
+            gen->pop("rax");
+            gen->pop("rbx");
+            gen->_output << "    add rax, rbx\n";
+            gen->push("rax");
+        }
+
+        auto operator()(const node::BinExprSub &binExprSub) const -> void {
+            gen->generateExpr(*binExprSub.rhs);
+            gen->generateExpr(*binExprSub.lhs);
+            gen->pop("rax");
+            gen->pop("rbx");
+            gen->_output << "    sub rax, rbx\n";
+            gen->push("rax");
+        }
+
+        auto operator()(const node::BinExprMul &binExprMul) const -> void {
+            gen->generateExpr(*binExprMul.rhs);
+            gen->generateExpr(*binExprMul.lhs);
+            gen->pop("rax");
+            gen->pop("rbx");
+            gen->_output << "    mul rbx\n";
+            gen->push("rax");
+        }
+
+        auto operator()(const node::BinExprDiv &binExprDiv) const -> void {
+            gen->generateExpr(*binExprDiv.rhs);
+            gen->generateExpr(*binExprDiv.lhs);
+            gen->pop("rax");
+            gen->pop("rbx");
+            gen->_output << "    div rbx\n";
+            gen->push("rax");
+        }
+    };
+    BinExprVisitor visitor{.gen = this};
+    std::visit(visitor, binExpr.var);
+}
 
 inline auto Generator::generateTerm(const node::Term &term) -> void {
     struct TermVisitor {
@@ -66,14 +112,9 @@ inline auto Generator::generateExpr(const node::Expr &expr) -> void {
             gen->generateTerm(term);
         }
         auto operator()(const node::BinExpr &binExpr) const -> void {
-            const auto&[lhs, rhs] = std::get<node::BinExprAdd>(binExpr.var);
-            gen->generateExpr(*lhs);
-            gen->generateExpr(*rhs);
-            gen->pop("rax");
-            gen->pop("rbx");
-            gen->_output << "    add rax, rbx\n";
-            gen->push("rax");
+            gen->generateBinExpr(binExpr);
         }
+
     };
 
     ExprVisitor visitor({.gen = this});
