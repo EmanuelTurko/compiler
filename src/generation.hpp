@@ -1,10 +1,13 @@
 #pragma once
 
+#include <algorithm>
+
 #include "parser.hpp"
 
 #include <sstream>
-#include <unordered_map>
+#include <map>
 #include <cassert>
+#include <utility>
 
 class Generator {
 public:
@@ -26,14 +29,19 @@ private:
 
     auto pop(const std::string &reg) -> void;
 
+    auto beginScope() -> void;
+    auto endScope() -> void;
+
     struct Var {
-        size_t _stackLocation{};
+        std::string name{};
+        size_t stackLocation{};
     };
 
     const node::Program _program;
     std::stringstream _output{};
     size_t _stackSize{};
-    std::unordered_map<std::string, Var> _vars{};
+    std::vector<Var> _vars{};
+    std::vector<size_t> _scopes{};
 };
 
 inline auto Generator::generateBinExpr(const node::BinExpr &binExpr) {
@@ -90,14 +98,26 @@ inline auto Generator::generateTerm(const node::Term &term) -> void {
         }
 
         auto operator()(const node::TermIdent &termIdent) const -> void {
-            if (const auto &ident = termIdent.ident.value.value(); !gen->_vars.contains(ident)) {
+            /*if (const auto &ident = termIdent.ident.value.value(); !gen->_vars.contains(ident)) {
                 std::cerr << "Undeclared identifier " << ident << std::endl;
                 exit(EXIT_FAILURE);
+            }*/
+
+            const auto it = std::ranges::find_if(
+                std::as_const(gen->_vars),[&](const Var& var)->bool {
+                return var.name == termIdent.ident.value.value();
+            });
+            if (it == gen->_vars.cend()) {
+                std::cerr << "Variable " << termIdent.ident.value.value() << " not found" << std::endl;
+                exit(EXIT_FAILURE);
             }
-            const auto &idx = gen->_vars[termIdent.ident.value.value()]._stackLocation;
+
             std::stringstream offset;
-            offset << "QWORD [rsp + " << (gen->_stackSize - idx - 1) * 8 << "]";
+            offset << "QWORD [rsp + " << (gen->_stackSize - it->stackLocation - 1) * 8 << "]";
             gen->push(offset.str());
+        }
+        auto operator()(const node::TermParen &termParen) const -> void {
+            gen->generateExpr(*termParen.parenExpr);
         }
     };
     TermVisitor visitor{.gen = this};
@@ -133,12 +153,28 @@ inline auto Generator::generateStmt(const node::Stmt &stmt) -> void {
         }
 
         auto operator()(const node::StmtLet &stmtLet) const -> void {
-            if (const auto &ident = stmtLet.ident.value.value(); gen->_vars.contains(ident)) {
+            /*if (const auto &ident = stmtLet.ident.value.value(); gen->_vars.contains(ident)) {
                 std::cerr << "Identifier already exists" << ident << std::endl;
                 exit(EXIT_FAILURE);
+            }*/
+
+            const auto it = std::ranges::find_if(
+                std::as_const(gen->_vars),[&](const Var& var) -> bool {
+                   return var.name == stmtLet.ident.value.value();
+                });
+            if (it != gen->_vars.cend()) {
+                std::cerr << "Variable " << stmtLet.ident.value.value() << " already exists" << std::endl;
+                exit(EXIT_FAILURE);
             }
-            gen->_vars.insert({stmtLet.ident.value.value(), Var{._stackLocation = gen->_stackSize}});
+            gen->_vars.push_back({.name = stmtLet.ident.value.value(), .stackLocation = gen->_stackSize});
             gen->generateExpr(stmtLet.expr);
+        }
+        auto operator()(const node::StmtScope &stmtScope) const -> void {
+            gen->beginScope();
+            for (const auto& stmt : stmtScope.stmts) {
+                gen->generateStmt(stmt);
+            }
+            gen->endScope();
         }
     };
 
@@ -166,4 +202,17 @@ inline auto Generator::push(const std::string &reg) -> void {
 inline auto Generator::pop(const std::string &reg) -> void {
     _output << "    pop " << reg << "\n";
     _stackSize--;
+}
+
+inline auto Generator::beginScope() -> void {
+    _scopes.push_back(_vars.size());
+}
+inline auto Generator::endScope() -> void {
+    const size_t popCount = _vars.size() - _scopes.back();
+    _output << "    add rsp, " << popCount << "\n";
+    _stackSize-= popCount;
+
+    for (size_t i{}; i<popCount; i++) _vars.pop_back();
+    _scopes.pop_back();
+
 }

@@ -16,59 +16,55 @@ using std::make_unique;
 
 namespace node {
     struct Expr;
+    struct Stmt;
 
     struct TermIntLit {
         Token intLit;
     };
-
     struct TermIdent {
         Token ident;
     };
-
+    struct TermParen {
+        unique_ptr<Expr> parenExpr;
+    };
     struct BinExprAdd {
         unique_ptr<Expr> lhs;
         unique_ptr<Expr> rhs;
     };
-
     struct BinExprMul {
         unique_ptr<Expr> lhs;
         unique_ptr<Expr> rhs;
     };
-
     struct BinExprDiv {
         unique_ptr<Expr> lhs;
         unique_ptr<Expr> rhs;
     };
-
     struct BinExprSub {
         unique_ptr<Expr> lhs;
         unique_ptr<Expr> rhs;
     };
-
     struct BinExpr {
         std::variant<BinExprAdd, BinExprMul,BinExprDiv,BinExprSub> var;
     };
-
     struct Term {
-        std::variant<TermIntLit, TermIdent> var;
+        std::variant<TermIntLit, TermIdent,TermParen> var;
     };
     struct Expr {
         std::variant<Term, BinExpr> var;
     };
-
     struct StmtExit {
         Expr expr;
     };
-
     struct StmtLet {
         Token ident;
         Expr expr;
     };
-
-    struct Stmt {
-        std::variant<StmtExit, StmtLet> var;
+    struct StmtScope {
+        std::vector<Stmt> stmts;
     };
-
+    struct Stmt {
+        std::variant<StmtExit, StmtLet,StmtScope> var;
+    };
     struct Program {
         std::vector<Stmt> stmts;
     };
@@ -81,19 +77,19 @@ public:
     _index(index){}
 
 
-    auto parseTerm() -> optional<node::Term>;
-    auto parseBinExpr(node::Expr lhs) -> optional<node::BinExpr>;
-    auto parseExpr(int minPrecedence = 0) -> optional<node::Expr>;
-    auto parseStmt() -> optional<node::Stmt>;
+    auto parseExpr() -> node::Expr;
+    auto tryParseTerm() -> optional<node::Term>;
+    auto tryParseExpr(int minPrecedence = 0) -> optional<node::Expr>;
+    auto tryParseStmt() -> optional<node::Stmt>;
     auto parseProgram() -> optional<node::Program>;
 
 private:
     [[nodiscard]] auto peek(size_t offset = 0) const -> optional<Token>;
 
     auto tryConsume(TokenType type) -> optional<Token>;
-    auto tryConsume(TokenType type, const std::string &errMsg) -> optional<Token>;
+    auto tryConsume(TokenType type, const std::string &errMsg) -> Token;
     auto consume() -> Token;
-
+    auto tryParseExpr(node::Expr expr) -> node::Expr;
     template<typename T>
     [[nodiscard]] auto constructExpr(node::Expr lhs,node::Expr rhs) -> node::Expr;
 
@@ -101,22 +97,30 @@ private:
     size_t _index;
 };
 
-inline auto Parser::parseTerm() -> optional<node::Term> {
+inline auto Parser::tryParseTerm() -> optional<node::Term> {
     if (const auto& IntLit = tryConsume(TokenType::intLit))
             return node::Term{.var = node::TermIntLit{.intLit = IntLit.value()}};
     if (const auto& Ident = tryConsume(TokenType::ident))
             return node::Term{.var = node::TermIdent{.ident = Ident.value()}};
+    if (tryConsume(TokenType::openParen)) {
+
+        auto expr = tryParseExpr();
+        if (!expr.has_value()) {
+            std::cerr << "Expected expression" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        tryConsume(TokenType::closeParen, "Expected ')'");
+        auto parenExpr = node::TermParen{.parenExpr = make_unique<node::Expr>(std::move(expr.value()))};
+        return node::Term{.var = std::move(parenExpr)};
+    }
     return nullopt;
 }
 
-inline auto Parser::parseBinExpr(node::Expr lhs) -> optional<node::BinExpr> {
-
-    auto lhsPtr = make_unique<node::Expr>(std::move(lhs));
-    if (auto rhs = parseExpr()) {
-        auto rhsPtr = make_unique<node::Expr>(std::move(rhs.value()));
-        return node::BinExpr{.var = node::BinExprAdd{std::move(lhsPtr), std::move(rhsPtr)}};
+inline auto Parser::parseExpr() -> node::Expr {
+    if (auto expr = tryParseExpr()) {
+        return std::move(expr.value());
     }
-    std::cerr << "Expected expression" << std::endl;
+    std::cerr << "Unable to parse expression" << std::endl;
     exit(EXIT_FAILURE);
 }
 
@@ -163,8 +167,8 @@ inline auto Parser::parseBinExpr(node::Expr lhs) -> optional<node::BinExpr> {
  * @param minPrecedence lowest operator precedence this call may consume
  * @return optional<node::Expr>
  */
-inline auto Parser::parseExpr(int minPrecedence) -> optional<node::Expr> {
-    auto term = parseTerm();
+inline auto Parser::tryParseExpr(int minPrecedence) -> optional<node::Expr> {
+    auto term = tryParseTerm();
     if (!term) return nullopt;
 
     node::Expr lhs{.var = std::move(term.value())};
@@ -175,7 +179,7 @@ inline auto Parser::parseExpr(int minPrecedence) -> optional<node::Expr> {
         if (!precedence || precedence < minPrecedence) break;
 
         auto [type, value] = consume();
-        auto rhs = parseExpr(precedence.value() + 1);
+        auto rhs = tryParseExpr(precedence.value() + 1);
         if (!rhs.has_value()) {
             std::cerr << "Unable to parse expression" << std::endl;
             exit(EXIT_FAILURE);
@@ -203,43 +207,40 @@ inline auto Parser::parseExpr(int minPrecedence) -> optional<node::Expr> {
     }
     return lhs;
 }
-inline auto Parser::parseStmt() -> optional<node::Stmt> {
-    if (peek().value().type == TokenType::exit && peek(1).has_value() && peek(1).value().type == TokenType::openParen) {
+inline auto Parser::tryParseStmt() -> optional<node::Stmt> {
+    if (!peek().has_value()) return nullopt;
+
+    if (peek().value().type == TokenType::let) {
         consume();
-        consume();
-        node::StmtExit stmt;
-        if (auto expr = parseExpr())
-            stmt = {.expr = std::move(expr.value())};
-        else {
-            std::cerr << "Invalid expression" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        tryConsume(TokenType::closeParen,"Expected ')'");
-        tryConsume(TokenType::semi,"Expected ';'");
-        return node::Stmt{.var = std::move(stmt)};
+        auto ident = tryConsume(TokenType::ident,"expected identifier");
+        tryConsume(TokenType::eq,"expected '=' after identifier");
+        auto expr = parseExpr();
+
+        tryConsume(TokenType::semi,"expected ';'");
+        return node::Stmt{.var = node::StmtLet{.ident = std::move(ident),.expr = std::move(expr)}};
     }
-    if (
-        peek().has_value() && peek().value().type == TokenType::let &&
-        peek(1).has_value() && peek(1).value().type == TokenType::ident &&
-        peek(2).has_value() && peek(2).value().type == TokenType::eq) {
-        consume();
-        auto stmt = node::StmtLet{.ident = consume(),.expr{}};
-        consume();
-        if (auto expr = parseExpr()) {
-            stmt.expr = std::move(expr.value());
-        } else {
-            std::cerr << "Invalid expression" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        tryConsume(TokenType::semi,"Expected ';'");
-        return node::Stmt{.var = std::move(stmt)};
-        }
+    if (peek().value().type == TokenType::exit) { // Statement: exit(x);
+        consume(); // |exit|(x);
+        tryConsume(TokenType::openParen,"expected '('"); // exit|(|x);
+        auto expr= parseExpr(); // exit(|x|);
+        tryConsume(TokenType::closeParen,"expected ')'"); // exit(x|)|;
+        tryConsume(TokenType::semi,"expected ';'"); //exit(x)|;|
+        return  node::Stmt{.var = node::StmtExit{.expr = std::move(expr)}};
+    }
+    if (peek().value().type == TokenType::openCurly) { // Statement: { let x = 5; }
+        consume(); // |{| let x = 5; }
+        node::StmtScope scope{};
+        while (auto stmt = tryParseStmt()) // recursion to parse the entire scoped stmt { | let x = 5; | }
+            scope.stmts.push_back(std::move(stmt.value()));
+        tryConsume(TokenType::closeCurly,"expected '}'"); // { let x = 5; |}|
+        return node::Stmt{.var = std::move(scope)};
+    }
     return nullopt;
 }
 inline auto Parser::parseProgram() -> optional<node::Program> {
     node::Program program;
     while (peek().has_value()) {
-        if (auto stmt = parseStmt()) {
+        if (auto stmt = tryParseStmt()) {
             program.stmts.push_back(std::move(stmt.value()));
         } else {
             std::cerr << "Invalid statement1" << std::endl;
@@ -255,7 +256,7 @@ inline auto Parser::tryConsume(const TokenType type) -> optional<Token> {
     return nullopt;
 }
 
-inline auto Parser::tryConsume(const TokenType type,const std::string &errMsg) -> optional<Token> {
+inline auto Parser::tryConsume(const TokenType type,const std::string &errMsg) -> Token {
     if (peek().has_value() && peek().value().type == type)
         return consume();
     std::cerr << errMsg << std::endl;

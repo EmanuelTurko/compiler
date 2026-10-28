@@ -22,7 +22,9 @@ enum class TokenType {
     plus,
     mul,
     sub,
-    div
+    div,
+    openCurly,
+    closeCurly,
 };
 inline auto isBinOp(const TokenType& type) ->bool {
     switch (type) {
@@ -105,11 +107,11 @@ inline auto Tokenizer::tokenizeSymbol(std::vector<Token> &tokens) -> void {
             break;
         case ')': tokens.push_back({.type = TokenType::closeParen});
             break;
-        /*case '{': tokens.push_back({.type = TokenType::openBrace});
+        case '{': tokens.push_back({.type = TokenType::openCurly});
             break;
-        case '}': tokens.push_back({.type = TokenType::closeBrace});
+        case '}': tokens.push_back({.type = TokenType::closeCurly});
             break;
-        case '[': tokens.push_back({.type = TokenType::openSquare});
+        /*case '[': tokens.push_back({.type = TokenType::openSquare});
             break;
         case ']': tokens.push_back({.type = TokenType::closeSquare});
             break;*/
