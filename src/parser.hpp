@@ -59,11 +59,16 @@ namespace node {
         Token ident;
         Expr expr;
     };
-    struct StmtScope {
+
+    struct Scope {
         std::vector<Stmt> stmts;
     };
+    struct StmtIf {
+        Expr expr;
+        Scope scope;
+    };
     struct Stmt {
-        std::variant<StmtExit, StmtLet,StmtScope> var;
+        std::variant<StmtExit, StmtLet,Scope,StmtIf> var;
     };
     struct Program {
         std::vector<Stmt> stmts;
@@ -90,6 +95,11 @@ private:
     auto tryConsume(TokenType type, const std::string &errMsg) -> Token;
     auto consume() -> Token;
     auto tryParseExpr(node::Expr expr) -> node::Expr;
+
+    auto parseStmtScope() -> node::Scope;
+    auto parseStmtLet() -> node::StmtLet;
+    auto parseStmtExit() -> node::StmtExit;
+    auto parseStmtBranchIf() -> node::StmtIf;
     template<typename T>
     [[nodiscard]] auto constructExpr(node::Expr lhs,node::Expr rhs) -> node::Expr;
 
@@ -193,7 +203,7 @@ inline auto Parser::tryParseExpr(int minPrecedence) -> optional<node::Expr> {
                 lhs = constructExpr<node:: BinExprMul>(std::move(lhs),std::move(rhs.value()));
                 break;
             }
-            case TokenType::sub: {
+            case TokenType::minus: {
                 lhs = constructExpr<node::BinExprSub>(std::move(lhs),std::move(rhs.value()));
                 break;
             }
@@ -210,32 +220,18 @@ inline auto Parser::tryParseExpr(int minPrecedence) -> optional<node::Expr> {
 inline auto Parser::tryParseStmt() -> optional<node::Stmt> {
     if (!peek().has_value()) return nullopt;
 
-    if (peek().value().type == TokenType::let) {
-        consume();
-        auto ident = tryConsume(TokenType::ident,"expected identifier");
-        tryConsume(TokenType::eq,"expected '=' after identifier");
-        auto expr = parseExpr();
-
-        tryConsume(TokenType::semi,"expected ';'");
-        return node::Stmt{.var = node::StmtLet{.ident = std::move(ident),.expr = std::move(expr)}};
+    switch (peek().value().type) {
+        case TokenType::let:
+            return node::Stmt{.var = parseStmtLet()};
+        case TokenType::exit:
+            return node::Stmt{.var = parseStmtExit()};
+        case TokenType::openCurly:
+            return node::Stmt{.var = parseStmtScope()};
+        case TokenType::branchIf:
+            return node::Stmt{.var = parseStmtBranchIf()};
+        default:
+            return nullopt;
     }
-    if (peek().value().type == TokenType::exit) { // Statement: exit(x);
-        consume(); // |exit|(x);
-        tryConsume(TokenType::openParen,"expected '('"); // exit|(|x);
-        auto expr= parseExpr(); // exit(|x|);
-        tryConsume(TokenType::closeParen,"expected ')'"); // exit(x|)|;
-        tryConsume(TokenType::semi,"expected ';'"); //exit(x)|;|
-        return  node::Stmt{.var = node::StmtExit{.expr = std::move(expr)}};
-    }
-    if (peek().value().type == TokenType::openCurly) { // Statement: { let x = 5; }
-        consume(); // |{| let x = 5; }
-        node::StmtScope scope{};
-        while (auto stmt = tryParseStmt()) // recursion to parse the entire scoped stmt { | let x = 5; | }
-            scope.stmts.push_back(std::move(stmt.value()));
-        tryConsume(TokenType::closeCurly,"expected '}'"); // { let x = 5; |}|
-        return node::Stmt{.var = std::move(scope)};
-    }
-    return nullopt;
 }
 inline auto Parser::parseProgram() -> optional<node::Program> {
     node::Program program;
@@ -282,3 +278,41 @@ auto Parser::constructExpr(node::Expr lhs, node::Expr rhs) -> node::Expr {
     return node::Expr{.var = std::move(bin)};
 }
 
+inline auto Parser::parseStmtLet() -> node::StmtLet {
+        consume();
+        auto ident = tryConsume(TokenType::ident,"expected identifier");
+        tryConsume(TokenType::eq,"expected '=' after identifier");
+        auto expr = parseExpr();
+        tryConsume(TokenType::semi,"expected ';'");
+        return node::StmtLet{.ident = std::move(ident),.expr = std::move(expr)};
+}
+
+inline auto Parser::parseStmtExit() -> node::StmtExit {
+    // Statement: exit(x);
+    consume(); // |exit|(x);
+    tryConsume(TokenType::openParen, "expected '('"); // exit|(|x);
+    auto expr = parseExpr(); // exit(|x|);
+    tryConsume(TokenType::closeParen, "expected ')'"); // exit(x|)|;
+    tryConsume(TokenType::semi, "expected ';'"); //exit(x)|;|
+    return node::StmtExit{.expr = std::move(expr)};
+}
+
+inline auto Parser::parseStmtBranchIf() -> node::StmtIf {
+    // if(x > 5) { do stuff; }
+    consume(); // |if|(x > 5) { do stuff; }
+    tryConsume(TokenType::openParen, "expected '('"); // if|(|x > 5) { do stuff; }
+    auto expr = parseExpr(); // if(|x > 5|) { do stuff; }
+    tryConsume(TokenType::closeParen, "expected ')'"); // if(x > 5|)| { do stuff; }
+    auto scope = parseStmtScope();
+    return node::StmtIf{.expr = std::move(expr), .scope = std::move(scope)};
+}
+
+inline auto Parser::parseStmtScope() -> node::Scope {
+    // Statement: { let x = 5; }
+    consume(); // |{| let x = 5; }
+    node::Scope scope{}; //
+    while (auto stmt = tryParseStmt()) // recursion to parse the entire scoped stmt { | let x = 5; | }
+        scope.stmts.push_back(std::move(stmt.value())); //
+    tryConsume(TokenType::closeCurly, "expected '}'"); // { let x = 5; |}|
+    return scope;
+}

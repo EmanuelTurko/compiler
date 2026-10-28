@@ -21,16 +21,18 @@ enum class TokenType {
     eq,
     plus,
     mul,
-    sub,
+    minus,
     div,
     openCurly,
     closeCurly,
+    branchIf,
+
 };
 inline auto isBinOp(const TokenType& type) ->bool {
     switch (type) {
         case TokenType::plus:
         case TokenType::mul:
-        case TokenType::sub:
+        case TokenType::minus:
         case TokenType::div:
             return true;
         default:
@@ -41,7 +43,7 @@ inline auto isBinOp(const TokenType& type) ->bool {
 inline auto binPrecedence(const TokenType &type) -> std::optional<int> {
     switch (type) {
         case TokenType::plus:
-        case TokenType::sub:
+        case TokenType::minus:
             return 0;
         case TokenType::mul:
         case TokenType::div:
@@ -98,6 +100,7 @@ inline auto Tokenizer::tokenizeWord() -> Token {
         buf.push_back(consume());
     if (buf == "exit") return {.type = TokenType::exit};
     if (buf == "let") return {.type = TokenType::let};
+    if (buf == "if") return {.type = TokenType::branchIf};
     return {.type = TokenType::ident, .value = buf};
 }
 
@@ -123,7 +126,7 @@ inline auto Tokenizer::tokenizeSymbol(std::vector<Token> &tokens) -> void {
             break;
         case '*': tokens.push_back({.type = TokenType::mul});
             break;
-        case '-': tokens.push_back({.type = TokenType::sub});
+        case '-': tokens.push_back({.type = TokenType::minus});
             break;
         case '/': tokens.push_back({.type = TokenType::div});
             break;

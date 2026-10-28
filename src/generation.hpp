@@ -22,6 +22,8 @@ public:
 
     auto generateStmt(const node::Stmt &stmt) -> void;
 
+    auto generateScope(const node::Scope &scope) -> void;
+
     [[nodiscard]] auto generateProgram() -> std::string;
 
 private:
@@ -31,6 +33,7 @@ private:
 
     auto beginScope() -> void;
     auto endScope() -> void;
+    auto makeLabel() -> std::string;
 
     struct Var {
         std::string name{};
@@ -40,6 +43,7 @@ private:
     const node::Program _program;
     std::stringstream _output{};
     size_t _stackSize{};
+    size_t _labelCount{};
     std::vector<Var> _vars{};
     std::vector<size_t> _scopes{};
 };
@@ -169,12 +173,18 @@ inline auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             gen->_vars.push_back({.name = stmtLet.ident.value.value(), .stackLocation = gen->_stackSize});
             gen->generateExpr(stmtLet.expr);
         }
-        auto operator()(const node::StmtScope &stmtScope) const -> void {
-            gen->beginScope();
-            for (const auto& stmt : stmtScope.stmts) {
-                gen->generateStmt(stmt);
-            }
-            gen->endScope();
+        auto operator()(const node::Scope &stmtScope) const -> void {
+           gen->generateScope(stmtScope);
+        }
+        auto operator()(const node::StmtIf &stmtIf) const -> void {
+           gen->generateExpr(stmtIf.expr);
+            gen->pop("rax");
+
+            const auto label = gen->makeLabel();
+            gen->_output << "    test rax, rax\n";
+            gen->_output << "    jz " << label << "\n";
+            gen->generateScope(stmtIf.scope);
+            gen->_output << label << ":\n";
         }
     };
 
@@ -190,8 +200,15 @@ inline auto Generator::generateProgram() -> std::string {
     }
     _output << "    mov rax,60\n";
     _output << "    mov rdi,0\n";
-    _output << "    syscall\n\n";
+    _output << "    syscall\n";
     return _output.str();
+}
+
+inline auto Generator::generateScope(const node::Scope &scope) -> void {
+    beginScope();
+    for (const auto& stmt : scope.stmts)
+        generateStmt(stmt);
+    endScope();
 }
 
 inline auto Generator::push(const std::string &reg) -> void {
@@ -215,4 +232,8 @@ inline auto Generator::endScope() -> void {
     for (size_t i{}; i<popCount; i++) _vars.pop_back();
     _scopes.pop_back();
 
+}
+
+inline auto Generator::makeLabel() -> std::string {
+    return "label" + std::to_string(_labelCount++);
 }
