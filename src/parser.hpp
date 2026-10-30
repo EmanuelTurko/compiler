@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cassert>
 #include <variant>
 #include <vector>
 #include <memory>
@@ -12,64 +11,85 @@ using std::optional;
 using std::nullopt;
 using std::unique_ptr;
 using std::make_unique;
+using std::variant;
 
 
 namespace node {
     struct Expr;
     struct Stmt;
 
-    struct TermIntLit {
-        Token intLit;
-    };
-    struct TermIdent {
-        Token ident;
-    };
-    struct TermParen {
-        unique_ptr<Expr> parenExpr;
-    };
-    struct BinExprAdd {
-        unique_ptr<Expr> lhs;
-        unique_ptr<Expr> rhs;
-    };
-    struct BinExprMul {
-        unique_ptr<Expr> lhs;
-        unique_ptr<Expr> rhs;
-    };
-    struct BinExprDiv {
-        unique_ptr<Expr> lhs;
-        unique_ptr<Expr> rhs;
-    };
-    struct BinExprMinus {
-        unique_ptr<Expr> lhs;
-        unique_ptr<Expr> rhs;
-    };
-    struct BinExpr {
-        std::variant<BinExprAdd, BinExprMul,BinExprDiv,BinExprMinus> var;
-    };
+    namespace term {
+        struct IntLit {
+            Token token;
+        };
+
+        struct Ident {
+            Token token;
+        };
+
+        struct Paren {
+            unique_ptr<Expr> expr;
+        };
+    }
+
     struct Term {
-        std::variant<TermIntLit, TermIdent,TermParen> var;
+        variant<term::IntLit, term::Ident, term::Paren> var;
     };
+
+    namespace expr {
+        struct Add {
+            unique_ptr<Expr> lhs;
+            unique_ptr<Expr> rhs;
+        };
+
+        struct Mul {
+            unique_ptr<Expr> lhs;
+            unique_ptr<Expr> rhs;
+        };
+
+        struct Div {
+            unique_ptr<Expr> lhs;
+            unique_ptr<Expr> rhs;
+        };
+
+        struct Sub {
+            unique_ptr<Expr> lhs;
+            unique_ptr<Expr> rhs;
+        };
+
+        struct Binary {
+            variant<Add, Mul, Div, Sub> var;
+        };
+    }
+
     struct Expr {
-        std::variant<Term, BinExpr> var;
-    };
-    struct StmtExit {
-        Expr expr;
-    };
-    struct StmtLet {
-        Token ident;
-        Expr expr;
+        variant<Term, expr::Binary> var;
     };
 
     struct Scope {
         std::vector<Stmt> stmts;
     };
-    struct StmtIf {
-        Expr expr;
-        Scope scope;
-    };
+
+    namespace stmt {
+        struct Exit {
+            Expr expr;
+        };
+
+        struct Let {
+            Token token;
+            Expr expr;
+        };
+
+        struct If {
+            Expr expr;
+            Scope scope;
+        };
+    }
+
     struct Stmt {
-        std::variant<StmtExit, StmtLet,Scope,StmtIf> var;
+        variant<stmt::Exit, stmt::Let, Scope, stmt::If> var;
     };
+
     struct Program {
         std::vector<Stmt> stmts;
     };
@@ -87,9 +107,9 @@ private:
 
     auto tryParseStmt() -> optional<node::Stmt>;
     auto parseStmtScope() -> node::Scope;
-    auto parseStmtLet() -> node::StmtLet;
-    auto parseStmtExit() -> node::StmtExit;
-    auto parseStmtBranchIf() -> node::StmtIf;
+    auto parseStmtLet() -> node::stmt::Let;
+    auto parseStmtExit() -> node::stmt::Exit;
+    auto parseStmtBranchIf() -> node::stmt::If;
     auto parseExpr() -> node::Expr;
     auto tryParseExpr(int minPrecedence = 0) -> optional<node::Expr>;
     auto tryParseTerm() -> optional<node::Term>;

@@ -15,38 +15,38 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
     struct StmtVisitor {
         Generator& gen;
 
-        auto operator()(const node::StmtExit &stmtExit) const -> void {
-            gen.generateExpr(stmtExit.expr);
+        auto operator()(const node::stmt::Exit &exit) const -> void {
+            gen.generateExpr(exit.expr);
             gen._output << "    mov rax,60\n";
             gen.pop("rdi");
             gen._output << "    syscall\n\n";
         }
 
-        auto operator()(const node::StmtLet &stmtLet) const -> void {
+        auto operator()(const node::stmt::Let &let) const -> void {
             const auto it = std::ranges::find_if(
                 std::as_const(gen._vars), [&](const Var &var) -> bool {
-                    return var.name == stmtLet.ident.value.value();
+                    return var.name == let.token.value.value();
                 });
             if (it != gen._vars.cend()) {
-                std::cerr << "Variable " << stmtLet.ident.value.value() << " already exists" << std::endl;
+                std::cerr << "Variable " << let.token.value.value() << " already exists" << std::endl;
                 exit(EXIT_FAILURE);
             }
-            gen._vars.push_back({.name = stmtLet.ident.value.value(), .stackLocation = gen._stackSize});
-            gen.generateExpr(stmtLet.expr);
+            gen._vars.push_back({.name = let.token.value.value(), .stackLocation = gen._stackSize});
+            gen.generateExpr(let.expr);
         }
 
         auto operator()(const node::Scope &stmtScope) const -> void {
             gen.generateScope(stmtScope);
         }
 
-        auto operator()(const node::StmtIf &stmtIf) const -> void {
-            gen.generateExpr(stmtIf.expr);
+        auto operator()(const node::stmt::If &_if) const -> void {
+            gen.generateExpr(_if.expr);
             gen.pop("rax");
 
             const auto label = gen.makeLabel();
             gen._output << "    test rax, rax\n";
             gen._output << "    jz " << label << "\n";
-            gen.generateScope(stmtIf.scope);
+            gen.generateScope(_if.scope);
             gen._output << label << ":\n";
         }
     };
@@ -58,18 +58,18 @@ auto Generator::generateTerm(const node::Term &term) -> void {
     struct TermVisitor {
         Generator& gen;
 
-        auto operator()(const node::TermIntLit &termIntLit) const -> void {
-            gen._output << "    mov rax, " << termIntLit.intLit.value.value() << "\n";
+        auto operator()(const node::term::IntLit &intLit) const -> void {
+            gen._output << "    mov rax, " << intLit.token.value.value() << "\n";
             gen.push("rax");
         }
 
-        auto operator()(const node::TermIdent &termIdent) const -> void {
+        auto operator()(const node::term::Ident &ident) const -> void {
             const auto it = std::ranges::find_if(
                 std::as_const(gen._vars), [&](const Var &var)-> bool {
-                    return var.name == termIdent.ident.value.value();
+                    return var.name == ident.token.value.value();
                 });
             if (it == gen._vars.cend()) {
-                std::cerr << "Variable " << termIdent.ident.value.value() << " not found" << std::endl;
+                std::cerr << "Variable " << ident.token.value.value() << " not found" << std::endl;
                 exit(EXIT_FAILURE);
             }
 
@@ -78,8 +78,8 @@ auto Generator::generateTerm(const node::Term &term) -> void {
             gen.push(offset.str());
         }
 
-        auto operator()(const node::TermParen &termParen) const -> void {
-            gen.generateExpr(*termParen.parenExpr);
+        auto operator()(const node::term::Paren &paren) const -> void {
+            gen.generateExpr(*paren.expr);
         }
     };
     TermVisitor visitor{.gen = *this};
@@ -92,44 +92,44 @@ auto Generator::generateExpr(const node::Expr &expr) -> void {
         auto operator()(const node::Term &term) const -> void {
             gen.generateTerm(term);
         }
-        auto operator()(const node::BinExpr &binExpr) const -> void {
-            gen.generateBinExpr(binExpr);
+        auto operator()(const node::expr::Binary &bin) const -> void {
+            gen.generateBinExpr(bin);
         }
     };
     ExprVisitor visitor({.gen = *this});
     std::visit(visitor, expr.var);
 }
-auto Generator::generateBinExpr(const node::BinExpr &binExpr) -> void {
+auto Generator::generateBinExpr(const node::expr::Binary &bin) -> void {
     struct BinExprVisitor {
         Generator &gen;
 
-        auto operator()(const node::BinExprAdd &binExprAdd) const -> void {
-            gen.generateExpr(*binExprAdd.rhs);
-            gen.generateExpr(*binExprAdd.lhs);
+        auto operator()(const node::expr::Add &add) const -> void {
+            gen.generateExpr(*add.rhs);
+            gen.generateExpr(*add.lhs);
             gen.pop("rax");
             gen.pop("rbx");
             gen._output << "    add rax, rbx\n";
             gen.push("rax");
         }
-        auto operator()(const node::BinExprMinus &binExprSub) const -> void {
-            gen.generateExpr(*binExprSub.rhs);
-            gen.generateExpr(*binExprSub.lhs);
+        auto operator()(const node::expr::Sub &sub) const -> void {
+            gen.generateExpr(*sub.rhs);
+            gen.generateExpr(*sub.lhs);
             gen.pop("rax");
             gen.pop("rbx");
             gen._output << "    sub rax, rbx\n";
             gen.push("rax");
         }
-        auto operator()(const node::BinExprMul &binExprMul) const -> void {
-            gen.generateExpr(*binExprMul.rhs);
-            gen.generateExpr(*binExprMul.lhs);
+        auto operator()(const node::expr::Mul &mul) const -> void {
+            gen.generateExpr(*mul.rhs);
+            gen.generateExpr(*mul.lhs);
             gen.pop("rax");
             gen.pop("rbx");
             gen._output << "    mul rbx\n";
             gen.push("rax");
         }
-        auto operator()(const node::BinExprDiv &binExprDiv) const -> void {
-            gen.generateExpr(*binExprDiv.rhs);
-            gen.generateExpr(*binExprDiv.lhs);
+        auto operator()(const node::expr::Div &div) const -> void {
+            gen.generateExpr(*div.rhs);
+            gen.generateExpr(*div.lhs);
             gen.pop("rax");
             gen.pop("rbx");
             gen._output << "    div rbx\n";
@@ -137,7 +137,7 @@ auto Generator::generateBinExpr(const node::BinExpr &binExpr) -> void {
         }
     };
     BinExprVisitor visitor{.gen = *this};
-    std::visit(visitor, binExpr.var);
+    std::visit(visitor, bin.var);
 }
 auto Generator::generateScope(const node::Scope &scope) -> void {
     beginScope();

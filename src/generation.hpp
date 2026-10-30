@@ -20,7 +20,7 @@ private:
 
     auto generateExpr(const node::Expr &expr) -> void;
 
-    auto generateBinExpr(const node::BinExpr &binExpr) -> void;
+    auto generateBinExpr(const node::expr::Binary &bin) -> void;
 
     auto generateScope(const node::Scope &scope) -> void;
 

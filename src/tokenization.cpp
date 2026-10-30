@@ -93,7 +93,7 @@ auto Tokenizer::tokenizeSymbol(std::vector<Token> &tokens) -> void {
             break;
         case '*': tokens.push_back({.type = TokenType::mul});
             break;
-        case '-': tokens.push_back({.type = TokenType::minus});
+        case '-': tokens.push_back({.type = TokenType::sub});
             break;
         case '/': tokens.push_back({.type = TokenType::div});
             break;

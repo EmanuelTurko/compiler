@@ -21,7 +21,7 @@ enum class TokenType {
     eq,
     plus,
     mul,
-    minus,
+    sub,
     div,
     openCurly,
     closeCurly,
@@ -32,7 +32,7 @@ inline auto isBinOp(const TokenType &type) -> bool {
     switch (type) {
         case TokenType::plus:
         case TokenType::mul:
-        case TokenType::minus:
+        case TokenType::sub:
         case TokenType::div:
             return true;
         default:
@@ -43,7 +43,7 @@ inline auto isBinOp(const TokenType &type) -> bool {
 inline auto binPrecedence(const TokenType &type) -> std::optional<int> {
     switch (type) {
         case TokenType::plus:
-        case TokenType::minus:
+        case TokenType::sub:
             return 0;
         case TokenType::mul:
         case TokenType::div:

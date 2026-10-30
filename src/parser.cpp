@@ -43,31 +43,31 @@ auto Parser::parseStmtScope() -> node::Scope {
     tryConsume(TokenType::closeCurly, "expected '}'"); // { let x = 5; |}|
     return scope;
 }
-auto Parser::parseStmtLet() -> node::StmtLet {
+auto Parser::parseStmtLet() -> node::stmt::Let {
     consume();
-    auto ident = tryConsume(TokenType::ident, "expected identifier");
+    auto token = tryConsume(TokenType::ident, "expected identifier");
     tryConsume(TokenType::eq, "expected '=' after identifier");
     auto expr = parseExpr();
     tryConsume(TokenType::semi, "expected ';'");
-    return node::StmtLet{.ident = std::move(ident), .expr = std::move(expr)};
+    return node::stmt::Let{.token = std::move(token), .expr = std::move(expr)};
 }
-auto Parser::parseStmtExit() -> node::StmtExit {
+auto Parser::parseStmtExit() -> node::stmt::Exit {
     // Statement: exit(x);
     consume(); // |exit|(x);
     tryConsume(TokenType::openParen, "expected '('"); // exit|(|x);
     auto expr = parseExpr(); // exit(|x|);
     tryConsume(TokenType::closeParen, "expected ')'"); // exit(x|)|;
     tryConsume(TokenType::semi, "expected ';'"); //exit(x)|;|
-    return node::StmtExit{.expr = std::move(expr)};
+    return node::stmt::Exit{.expr = std::move(expr)};
 }
-auto Parser::parseStmtBranchIf() -> node::StmtIf {
+auto Parser::parseStmtBranchIf() -> node::stmt::If {
     // if(x > 5) { do stuff; }
     consume(); // |if|(x > 5) { do stuff; }
     tryConsume(TokenType::openParen, "expected '('"); // if|(|x > 5) { do stuff; }
     auto expr = parseExpr(); // if(|x > 5|) { do stuff; }
     tryConsume(TokenType::closeParen, "expected ')'"); // if(x > 5|)| { do stuff; }
     auto scope = parseStmtScope();
-    return node::StmtIf{.expr = std::move(expr), .scope = std::move(scope)};
+    return node::stmt::If{.expr = std::move(expr), .scope = std::move(scope)};
 }
 auto Parser::parseExpr() -> Expr {
     if (auto expr = tryParseExpr()) {
@@ -138,19 +138,19 @@ auto Parser::tryParseExpr(int minPrecedence) -> optional<Expr> {
         }
         switch (token.type) {
             case TokenType::plus: {
-                lhs = constructExpr<node::BinExprAdd>(std::move(lhs), std::move(rhs.value()));
+                lhs = constructExpr<node::expr::Add>(std::move(lhs), std::move(rhs.value()));
                 break;
             }
             case TokenType::mul: {
-                lhs = constructExpr<node::BinExprMul>(std::move(lhs), std::move(rhs.value()));
+                lhs = constructExpr<node::expr::Mul>(std::move(lhs), std::move(rhs.value()));
                 break;
             }
-            case TokenType::minus: {
-                lhs = constructExpr<node::BinExprMinus>(std::move(lhs), std::move(rhs.value()));
+            case TokenType::sub: {
+                lhs = constructExpr<node::expr::Sub>(std::move(lhs), std::move(rhs.value()));
                 break;
             }
             case TokenType::div: {
-                lhs = constructExpr<node::BinExprDiv>(std::move(lhs), std::move(rhs.value()));
+                lhs = constructExpr<node::expr::Div>(std::move(lhs), std::move(rhs.value()));
                 break;
             }
             default:
@@ -160,10 +160,10 @@ auto Parser::tryParseExpr(int minPrecedence) -> optional<Expr> {
     return lhs;
 }
 auto Parser::tryParseTerm() -> optional<node::Term> {
-    if (const auto &intLit = tryConsume(TokenType::intLit))
-        return node::Term{.var = node::TermIntLit{.intLit = intLit.value()}};
-    if (const auto &ident = tryConsume(TokenType::ident))
-        return node::Term{.var = node::TermIdent{.ident = ident.value()}};
+    if (const auto &token = tryConsume(TokenType::intLit))
+        return node::Term{.var = node::term::IntLit{.token = token.value()}};
+    if (const auto &token = tryConsume(TokenType::ident))
+        return node::Term{.var = node::term::Ident{.token = token.value()}};
     if (tryConsume(TokenType::openParen)) {
         auto expr = tryParseExpr();
         if (!expr.has_value()) {
@@ -171,7 +171,7 @@ auto Parser::tryParseTerm() -> optional<node::Term> {
             exit(EXIT_FAILURE);
         }
         tryConsume(TokenType::closeParen, "Expected ')'");
-        auto parenExpr = node::TermParen{.parenExpr = make_unique<Expr>(std::move(expr.value()))};
+        auto parenExpr = node::term::Paren{.expr = make_unique<Expr>(std::move(expr.value()))};
         return node::Term{.var = std::move(parenExpr)};
     }
     return nullopt;
@@ -200,7 +200,7 @@ auto Parser::constructExpr(Expr lhs, Expr rhs) -> Expr {
         .lhs = make_unique<Expr>(std::move(lhs)),
         .rhs = make_unique<Expr>(std::move(rhs))
     };
-    node::BinExpr bin{.var = std::move(t)};
+    node::expr::Binary bin{.var = std::move(t)};
     return Expr{.var = std::move(bin)};
 }
 
