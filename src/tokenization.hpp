@@ -73,6 +73,8 @@ private:
 
     [[nodiscard]] auto tokenizeNum() -> Token;
 
+    [[nodiscard]] auto skipComment() -> bool;
+
     auto tokenizeSymbol(std::vector<Token> &tokens) -> void;
 
     auto consume() -> char;

@@ -1,5 +1,11 @@
 #include "parser.hpp"
 
+using Expr = node::Expr;
+using Stmt = node::Stmt;
+
+
+
+
 auto Parser::parseProgram() -> optional<node::Program> {
     node::Program program;
     while (peek().has_value()) {
@@ -12,18 +18,18 @@ auto Parser::parseProgram() -> optional<node::Program> {
     }
     return program;
 }
-auto Parser::tryParseStmt() -> optional<node::Stmt> {
+auto Parser::tryParseStmt() -> optional<Stmt> {
     if (!peek().has_value()) return nullopt;
 
     switch (peek().value().type) {
         case TokenType::let:
-            return node::Stmt{.var = parseStmtLet()};
+            return Stmt{.var = parseStmtLet()};
         case TokenType::exit:
-            return node::Stmt{.var = parseStmtExit()};
+            return Stmt{.var = parseStmtExit()};
         case TokenType::openCurly:
-            return node::Stmt{.var = parseStmtScope()};
+            return Stmt{.var = parseStmtScope()};
         case TokenType::branchIf:
-            return node::Stmt{.var = parseStmtBranchIf()};
+            return Stmt{.var = parseStmtBranchIf()};
         default:
             return nullopt;
     }
@@ -63,7 +69,7 @@ auto Parser::parseStmtBranchIf() -> node::StmtIf {
     auto scope = parseStmtScope();
     return node::StmtIf{.expr = std::move(expr), .scope = std::move(scope)};
 }
-auto Parser::parseExpr() -> node::Expr {
+auto Parser::parseExpr() -> Expr {
     if (auto expr = tryParseExpr()) {
         return std::move(expr.value());
     }
@@ -111,26 +117,26 @@ auto Parser::parseExpr() -> node::Expr {
     │   │ peek ';' → return (3 * 2) ─────────────────────────┘
     │ lhs = 5 + (3 * 2)
  * @param minPrecedence lowest operator precedence this call may consume
- * @return optional<node::Expr>
+ * @return optional<Expr>
  */
-auto Parser::tryParseExpr(int minPrecedence) -> optional<node::Expr> {
+auto Parser::tryParseExpr(int minPrecedence) -> optional<Expr> {
     auto term = tryParseTerm();
     if (!term) return nullopt;
 
-    node::Expr lhs{.var = std::move(term.value())};
+    Expr lhs{.var = std::move(term.value())};
 
     while (true) {
         optional<Token> current = peek();
-        optional<int> precedence = peek().has_value() ? binPrecedence(current.value().type) : nullopt;
-        if (!precedence || precedence < minPrecedence) break;
+        optional<int> precedence = current ? binPrecedence(current.value().type) : nullopt;
+        if (!precedence || *precedence < minPrecedence) break;
 
-        auto [type, value] = consume();
+        const auto token = consume();
         auto rhs = tryParseExpr(precedence.value() + 1);
         if (!rhs.has_value()) {
             std::cerr << "Unable to parse expression" << std::endl;
             exit(EXIT_FAILURE);
         }
-        switch (type) {
+        switch (token.type) {
             case TokenType::plus: {
                 lhs = constructExpr<node::BinExprAdd>(std::move(lhs), std::move(rhs.value()));
                 break;
@@ -154,10 +160,10 @@ auto Parser::tryParseExpr(int minPrecedence) -> optional<node::Expr> {
     return lhs;
 }
 auto Parser::tryParseTerm() -> optional<node::Term> {
-    if (const auto &IntLit = tryConsume(TokenType::intLit))
-        return node::Term{.var = node::TermIntLit{.intLit = IntLit.value()}};
-    if (const auto &Ident = tryConsume(TokenType::ident))
-        return node::Term{.var = node::TermIdent{.ident = Ident.value()}};
+    if (const auto &intLit = tryConsume(TokenType::intLit))
+        return node::Term{.var = node::TermIntLit{.intLit = intLit.value()}};
+    if (const auto &ident = tryConsume(TokenType::ident))
+        return node::Term{.var = node::TermIdent{.ident = ident.value()}};
     if (tryConsume(TokenType::openParen)) {
         auto expr = tryParseExpr();
         if (!expr.has_value()) {
@@ -165,7 +171,7 @@ auto Parser::tryParseTerm() -> optional<node::Term> {
             exit(EXIT_FAILURE);
         }
         tryConsume(TokenType::closeParen, "Expected ')'");
-        auto parenExpr = node::TermParen{.parenExpr = make_unique<node::Expr>(std::move(expr.value()))};
+        auto parenExpr = node::TermParen{.parenExpr = make_unique<Expr>(std::move(expr.value()))};
         return node::Term{.var = std::move(parenExpr)};
     }
     return nullopt;
@@ -189,13 +195,13 @@ auto Parser::consume() -> Token {
     return _tokens[_index++];
 }
 template<typename T>
-auto Parser::constructExpr(node::Expr lhs, node::Expr rhs) -> node::Expr {
+auto Parser::constructExpr(Expr lhs, Expr rhs) -> Expr {
     T t{
-        .lhs = make_unique<node::Expr>(std::move(lhs)),
-        .rhs = make_unique<node::Expr>(std::move(rhs))
+        .lhs = make_unique<Expr>(std::move(lhs)),
+        .rhs = make_unique<Expr>(std::move(rhs))
     };
     node::BinExpr bin{.var = std::move(t)};
-    return node::Expr{.var = std::move(bin)};
+    return Expr{.var = std::move(bin)};
 }
 
 
