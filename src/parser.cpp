@@ -28,6 +28,8 @@ auto Parser::tryParseStmt() -> optional<Stmt> {
             return Stmt{.var = parseStmtExit()};
         case TokenType::openCurly:
             return Stmt{.var = parseScope()};
+        case TokenType::ident:
+            return Stmt{.var = parseAssignment()};
         case TokenType::branchIf:
             return Stmt{.var = parseStmtBranchIf()};
         default:
@@ -78,6 +80,14 @@ auto Parser::parseCondition() -> node::Expr {
     tryConsume(TokenType::closeParen, "Expected ')'");
 
     return cond;
+}
+
+auto Parser::parseAssignment() -> node::stmt::Assignment {
+    const auto token = consume(); // get the target
+    tryConsume(TokenType::eq, "Expected '='");
+    auto expr = parseExpr();
+    tryConsume(TokenType::semi, "Expected ';'");
+    return {.token = token,.expr = std::move(expr)};
 }
 
 auto Parser::parseExpr() -> Expr {

@@ -6,6 +6,7 @@ $$
     \begin{cases}
         \text{exit}([\text{Expr}]); \\
         \text{let}\ \text{ident} = [\text{Expr}]; \\
+        \text{ident} = \text{[Expr]} \\
         \text{if}([\text{Expr}])[\text{Scope}][\text{Elif}] \\
         [\text{Scope}]
     \end{cases} \\[6pt]

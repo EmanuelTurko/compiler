@@ -38,7 +38,21 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
         auto operator()(const node::Scope &scope) const -> void {
             gen.generateScope(scope);
         }
+        auto operator()(const node::stmt::Assignment &assignment) const -> void {
+            const auto it = std::ranges::find_if(
+                std::as_const(gen._vars), [&](const Var &var) -> bool {
+                    return var.name == assignment.token.value.value();
+                });
+            if (it == gen._vars.cend()) {
+                std::cerr << "Variable " << assignment.token.value.value() << " not found" << std::endl;
+                exit(EXIT_FAILURE);
+            }
 
+            gen.generateExpr(assignment.expr);
+            gen.pop("rax");
+            gen._output << "    mov [rsp + " << gen._stackSize - it->stackLocation << "],rax\n";
+
+        }
         auto operator()(const node::stmt::If &_if) const -> void {
             gen.generateExpr(_if.cond);
             gen.pop("rax");

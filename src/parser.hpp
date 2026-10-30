@@ -32,11 +32,9 @@ namespace node {
             unique_ptr<Expr> expr;
         };
     }
-
     struct Term {
         variant<term::IntLit, term::Ident, term::Paren> var;
     };
-
     namespace expr {
         struct Add {
             unique_ptr<Expr> lhs;
@@ -62,15 +60,25 @@ namespace node {
             variant<Add, Mul, Div, Sub> var;
         };
     }
-
     struct Expr {
         variant<Term, expr::Binary> var;
     };
-
     struct Scope {
         std::vector<Stmt> stmts;
     };
-
+    namespace pred {
+        struct Elif {
+            Expr cond;
+            Scope scope;
+            unique_ptr<IfPred> next;
+        };
+        struct Else {
+            Scope scope;
+        };
+    }
+    struct IfPred {
+        variant<pred::Elif,pred::Else> var;
+    };
     namespace stmt {
         struct Exit {
             Expr expr;
@@ -86,22 +94,13 @@ namespace node {
             Scope scope;
             unique_ptr<IfPred> next;
         };
-    }
-    namespace pred {
-        struct Elif {
-            Expr cond;
-            Scope scope;
-            unique_ptr<IfPred> next;
-        };
-        struct Else {
-            Scope scope;
+        struct Assignment {
+            Token token;
+            Expr expr;
         };
     }
-    struct IfPred {
-        variant<pred::Elif,pred::Else> var;
-    };
     struct Stmt {
-        variant<stmt::Exit, stmt::Let, Scope, stmt::If> var;
+        variant<stmt::Exit, stmt::Let, Scope, stmt::If,stmt::Assignment> var;
     };
     struct Program {
         std::vector<Stmt> stmts;
@@ -124,6 +123,7 @@ private:
     auto parseStmtExit() -> node::stmt::Exit;
     auto parseStmtBranchIf() -> node::stmt::If;
     auto parseCondition() -> node::Expr;
+    auto parseAssignment() -> node::stmt::Assignment;
     auto parseExpr() -> node::Expr;
     auto tryParseExpr(int minPrecedence = 0) -> optional<node::Expr>;
     auto tryParseTerm() -> optional<node::Term>;
