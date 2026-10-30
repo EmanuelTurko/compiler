@@ -17,6 +17,7 @@ using std::variant;
 namespace node {
     struct Expr;
     struct Stmt;
+    struct IfPred;
 
     namespace term {
         struct IntLit {
@@ -81,15 +82,27 @@ namespace node {
         };
 
         struct If {
-            Expr expr;
+            Expr cond;
+            Scope scope;
+            unique_ptr<IfPred> next;
+        };
+    }
+    namespace pred {
+        struct Elif {
+            Expr cond;
+            Scope scope;
+            unique_ptr<IfPred> next;
+        };
+        struct Else {
             Scope scope;
         };
     }
-
+    struct IfPred {
+        variant<pred::Elif,pred::Else> var;
+    };
     struct Stmt {
         variant<stmt::Exit, stmt::Let, Scope, stmt::If> var;
     };
-
     struct Program {
         std::vector<Stmt> stmts;
     };
@@ -106,13 +119,15 @@ public:
 private:
 
     auto tryParseStmt() -> optional<node::Stmt>;
-    auto parseStmtScope() -> node::Scope;
+    auto parseScope() -> node::Scope;
     auto parseStmtLet() -> node::stmt::Let;
     auto parseStmtExit() -> node::stmt::Exit;
     auto parseStmtBranchIf() -> node::stmt::If;
+    auto parseCondition() -> node::Expr;
     auto parseExpr() -> node::Expr;
     auto tryParseExpr(int minPrecedence = 0) -> optional<node::Expr>;
     auto tryParseTerm() -> optional<node::Term>;
+    auto tryParseIfPred() -> unique_ptr<node::IfPred>;
 
     [[nodiscard]] auto peek(size_t offset = 0) const -> optional<Token>;
 

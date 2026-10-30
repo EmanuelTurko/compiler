@@ -58,9 +58,9 @@ auto Tokenizer::tokenizeWord() -> Token {
 
     while (peek().has_value() && isalnum(peek().value()))
         buf.push_back(consume());
-    if (buf == "exit") return {.type = TokenType::exit};
-    if (buf == "let") return {.type = TokenType::let};
-    if (buf == "if") return {.type = TokenType::branchIf};
+
+    if (const auto it = _keywords.find(buf); it != _keywords.cend())
+        return {.type = it->second};
     return {.type = TokenType::ident, .value = buf};
 }
 auto Tokenizer::tokenizeNum() -> Token {

@@ -4,6 +4,7 @@
 #include <vector>
 #include <iostream>
 #include <optional>
+#include <unordered_map>
 
 using std::isalpha;
 using std::isalnum;
@@ -26,6 +27,8 @@ enum class TokenType {
     openCurly,
     closeCurly,
     branchIf,
+    branchElif,
+    branchElse,
 };
 
 inline auto isBinOp(const TokenType &type) -> bool {
@@ -82,4 +85,11 @@ private:
 
     const std::string _src;
     size_t _index;
+    inline static const std::unordered_map<std::string_view, TokenType> _keywords= {
+        {"exit", TokenType::exit},
+        {"let", TokenType::let},
+        {"if", TokenType::branchIf},
+        {"elif", TokenType::branchElif},
+        {"else", TokenType::branchElse}
+    };
 };

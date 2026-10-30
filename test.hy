@@ -1,8 +1,14 @@
 let x = 2;
-if(x-2){
-/*
-mynmesadasdas * 2 5 *
-*/
- exit(5);
+if(0){
+    exit(5);
+}
+elif(0){
+    exit(69);
+}
+elif(0){
+    exit(55);
+}
+else{
+    exit(42);
 }
 exit(1);

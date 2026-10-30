@@ -35,24 +35,51 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             gen.generateExpr(let.expr);
         }
 
-        auto operator()(const node::Scope &stmtScope) const -> void {
-            gen.generateScope(stmtScope);
+        auto operator()(const node::Scope &scope) const -> void {
+            gen.generateScope(scope);
         }
 
         auto operator()(const node::stmt::If &_if) const -> void {
-            gen.generateExpr(_if.expr);
+            gen.generateExpr(_if.cond);
             gen.pop("rax");
 
-            const auto label = gen.makeLabel();
+            auto label = gen.makeLabel();
             gen._output << "    test rax, rax\n";
             gen._output << "    jz " << label << "\n";
             gen.generateScope(_if.scope);
             gen._output << label << ":\n";
+            if (_if.next) gen.generateIfPred(*_if.next,label);
         }
     };
 
     StmtVisitor visitor{.gen = *this};
     std::visit(visitor, stmt.var);
+}
+
+auto Generator::generateIfPred(const node::IfPred &ifPred, std::string& endLabel) -> void {
+    struct PredVisitor {
+        Generator& gen;
+        std::string& endLabel;
+        auto operator()(const node::pred::Elif &predElif) const -> void {
+
+            gen.generateExpr(predElif.cond);
+            gen.pop("rax");
+
+            const auto label = gen.makeLabel();
+            gen._output << "    test rax, rax\n";
+            gen._output << "    jz " << label << "\n";
+            gen.generateScope(predElif.scope);
+            gen._output << "    jmp " << endLabel << "\n";
+            gen._output << label << ":\n";
+            if (predElif.next) gen.generateIfPred(*predElif.next,endLabel);
+        }
+        auto operator()(const node::pred::Else &predElse) const -> void {
+            gen.generateScope(predElse.scope);
+        }
+    };
+
+    PredVisitor visitor{.gen = *this, .endLabel = endLabel};
+    std::visit(visitor, ifPred.var);
 }
 auto Generator::generateTerm(const node::Term &term) -> void {
     struct TermVisitor {
@@ -145,6 +172,8 @@ auto Generator::generateScope(const node::Scope &scope) -> void {
         generateStmt(stmt);
     endScope();
 }
+
+
 auto Generator::push(const std::string &reg) -> void {
     _output << "    push " << reg << "\n";
     _stackSize++;
@@ -166,3 +195,5 @@ auto Generator::endScope() -> void {
 auto Generator::makeLabel() -> std::string {
     return "label" + std::to_string(_labelCount++);
 }
+
+

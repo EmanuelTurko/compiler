@@ -24,6 +24,8 @@ private:
 
     auto generateScope(const node::Scope &scope) -> void;
 
+    auto generateIfPred(const node::IfPred &ifPred, std::string& endLabel) -> void;
+
     auto push(const std::string &reg) -> void;
 
     auto pop(const std::string &reg) -> void;

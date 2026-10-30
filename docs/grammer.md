@@ -15,12 +15,7 @@ $$
     [\text{IfPred}] &\to
     \begin{cases}
         \text{elif}([\text{Expr}])[\text{Scope}][\text{IfPred}] \\
-        \epsilon
-    \end{cases} \\[6pt]
-
-    [\text{Else}] &\to
-    \begin{cases}
-        \text{else}([\text{Expr}])[\text{Scope}]\\
+        \text{else}\text{[Scope]}\\
         \epsilon
     \end{cases} \\[6pt]
 

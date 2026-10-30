@@ -27,14 +27,14 @@ auto Parser::tryParseStmt() -> optional<Stmt> {
         case TokenType::exit:
             return Stmt{.var = parseStmtExit()};
         case TokenType::openCurly:
-            return Stmt{.var = parseStmtScope()};
+            return Stmt{.var = parseScope()};
         case TokenType::branchIf:
             return Stmt{.var = parseStmtBranchIf()};
         default:
             return nullopt;
     }
 }
-auto Parser::parseStmtScope() -> node::Scope {
+auto Parser::parseScope() -> node::Scope {
     // Statement: { let x = 5; }
     consume(); // |{| let x = 5; }
     node::Scope scope{}; //
@@ -62,13 +62,24 @@ auto Parser::parseStmtExit() -> node::stmt::Exit {
 }
 auto Parser::parseStmtBranchIf() -> node::stmt::If {
     // if(x > 5) { do stuff; }
-    consume(); // |if|(x > 5) { do stuff; }
-    tryConsume(TokenType::openParen, "expected '('"); // if|(|x > 5) { do stuff; }
-    auto expr = parseExpr(); // if(|x > 5|) { do stuff; }
-    tryConsume(TokenType::closeParen, "expected ')'"); // if(x > 5|)| { do stuff; }
-    auto scope = parseStmtScope();
-    return node::stmt::If{.expr = std::move(expr), .scope = std::move(scope)};
+    consume();
+    auto cond = parseCondition();
+    auto scope = parseScope();
+    auto next = tryParseIfPred();
+    return node::stmt::If{
+        .cond = std::move(cond),
+        .scope = std::move(scope),
+        .next = std::move(next)
+    };
 }
+auto Parser::parseCondition() -> node::Expr {
+    tryConsume(TokenType::openParen, "Expected '('");
+    auto cond = parseExpr();
+    tryConsume(TokenType::closeParen, "Expected ')'");
+
+    return cond;
+}
+
 auto Parser::parseExpr() -> Expr {
     if (auto expr = tryParseExpr()) {
         return std::move(expr.value());
@@ -176,6 +187,32 @@ auto Parser::tryParseTerm() -> optional<node::Term> {
     }
     return nullopt;
 }
+
+auto Parser::tryParseIfPred() -> unique_ptr<node::IfPred> {
+    if (tryConsume(TokenType::branchElif)) {
+        auto cond = parseCondition();
+        auto scope = parseScope();
+
+        return make_unique<node::IfPred>(
+            node::IfPred{
+                .var = node::pred::Elif{
+                    .cond = std::move(cond),
+                    .scope = std::move(scope),
+                    .next = tryParseIfPred()
+                }
+            });
+    }
+    if (tryConsume(TokenType::branchElse)) {
+        return make_unique<node::IfPred>(
+            node::IfPred{
+                .var = node::pred::Else{
+                    .scope = parseScope()
+                }
+            });
+    }
+    return nullptr;
+}
+
 auto Parser::peek(const size_t offset) const -> optional<Token> {
     if (_index + offset >= _tokens.size()) return std::nullopt;
     return _tokens[_index + offset];
