@@ -1,5 +1,7 @@
 #include "parser.hpp"
 
+#include "error.hpp"
+
 using Expr = node::Expr;
 using Stmt = node::Stmt;
 
@@ -12,8 +14,7 @@ auto Parser::parseProgram() -> optional<node::Program> {
         if (auto stmt = tryParseStmt()) {
             program.stmts.push_back(std::move(stmt.value()));
         } else {
-            std::cerr << "Invalid statement1" << std::endl;
-            exit(EXIT_FAILURE);
+            error("Invalid statement",peek().value().location);
         }
     }
     return program;
@@ -94,8 +95,7 @@ auto Parser::parseExpr() -> Expr {
     if (auto expr = tryParseExpr()) {
         return std::move(expr.value());
     }
-    std::cerr << "Unable to parse expression" << std::endl;
-    exit(EXIT_FAILURE);
+    error("Unable to parse expression",peek().value().location);
 }
 /** 1. Read one term: every expression (Expr) starts with a term.
  *     If there is no term, there is no expression: return nullopt and let the caller decide if that's an error.
@@ -154,8 +154,7 @@ auto Parser::tryParseExpr(int minPrecedence) -> optional<Expr> {
         const auto token = consume();
         auto rhs = tryParseExpr(precedence.value() + 1);
         if (!rhs.has_value()) {
-            std::cerr << "Unable to parse expression" << std::endl;
-            exit(EXIT_FAILURE);
+            error("Unable to parse expression",peek().value().location);
         }
         switch (token.type) {
             case TokenType::plus: {
@@ -188,8 +187,7 @@ auto Parser::tryParseTerm() -> optional<node::Term> {
     if (tryConsume(TokenType::openParen)) {
         auto expr = tryParseExpr();
         if (!expr.has_value()) {
-            std::cerr << "Expected expression" << std::endl;
-            exit(EXIT_FAILURE);
+            error("Expected expression",peek().value().location);
         }
         tryConsume(TokenType::closeParen, "Expected ')'");
         auto parenExpr = node::term::Paren{.expr = make_unique<Expr>(std::move(expr.value()))};
@@ -235,8 +233,7 @@ auto Parser::tryConsume(const TokenType type) -> optional<Token> {
 auto Parser::tryConsume(const TokenType type, const std::string &errMsg) -> Token {
     if (peek().has_value() && peek().value().type == type)
         return consume();
-    std::cerr << errMsg << std::endl;
-    exit(EXIT_FAILURE);
+    error(errMsg,peek().value().location);
 }
 auto Parser::consume() -> Token {
     return _tokens[_index++];

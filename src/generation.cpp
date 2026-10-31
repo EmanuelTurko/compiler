@@ -1,5 +1,7 @@
 #include "generation.hpp"
 
+#include "error.hpp"
+
 auto Generator::generateProgram() -> std::string {
     _output << "global _start\n_start:\n";
 
@@ -16,10 +18,12 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
         Generator& gen;
 
         auto operator()(const node::stmt::Exit &exit) const -> void {
+            gen._output << ";; exit\n";
             gen.generateExpr(exit.expr);
             gen._output << "    mov rax,60\n";
             gen.pop("rdi");
             gen._output << "    syscall\n\n";
+            gen._output << ";; /exit\n";
         }
 
         auto operator()(const node::stmt::Let &let) const -> void {
@@ -28,15 +32,18 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
                     return var.name == let.token.value.value();
                 });
             if (it != gen._vars.cend()) {
-                std::cerr << "Variable " << let.token.value.value() << " already exists" << std::endl;
-                exit(EXIT_FAILURE);
+                error("Variable already exists",let.token.location);
             }
             gen._vars.push_back({.name = let.token.value.value(), .stackLocation = gen._stackSize});
+            gen._output << ";; let\n";
             gen.generateExpr(let.expr);
+            gen._output << ";; /let\n";
         }
 
         auto operator()(const node::Scope &scope) const -> void {
+            gen._output << ";; scope\n";
             gen.generateScope(scope);
+            gen._output << ";; /scope\n";
         }
         auto operator()(const node::stmt::Assignment &assignment) const -> void {
             const auto it = std::ranges::find_if(
@@ -44,16 +51,18 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
                     return var.name == assignment.token.value.value();
                 });
             if (it == gen._vars.cend()) {
-                std::cerr << "Variable " << assignment.token.value.value() << " not found" << std::endl;
-                exit(EXIT_FAILURE);
+                error("Variable not found",assignment.token.location);
             }
 
+            gen._output << ";; assignment\n";
             gen.generateExpr(assignment.expr);
             gen.pop("rax");
             gen._output << "    mov [rsp + " << gen._stackSize - it->stackLocation << "],rax\n";
+            gen._output << ";; /assignment\n";
 
         }
         auto operator()(const node::stmt::If &_if) const -> void {
+            gen._output << ";; if\n";
             gen.generateExpr(_if.cond);
             gen.pop("rax");
 
@@ -63,6 +72,7 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             gen.generateScope(_if.scope);
             gen._output << label << ":\n";
             if (_if.next) gen.generateIfPred(*_if.next,label);
+            gen._output << ";; /if\n";
         }
     };
 
@@ -76,6 +86,7 @@ auto Generator::generateIfPred(const node::IfPred &ifPred, std::string& endLabel
         std::string& endLabel;
         auto operator()(const node::pred::Elif &predElif) const -> void {
 
+            gen._output << ";; elif\n";
             gen.generateExpr(predElif.cond);
             gen.pop("rax");
 
@@ -86,9 +97,12 @@ auto Generator::generateIfPred(const node::IfPred &ifPred, std::string& endLabel
             gen._output << "    jmp " << endLabel << "\n";
             gen._output << label << ":\n";
             if (predElif.next) gen.generateIfPred(*predElif.next,endLabel);
+            gen._output << ";; /elif\n";
         }
         auto operator()(const node::pred::Else &predElse) const -> void {
+            gen._output << ";; else\n";
             gen.generateScope(predElse.scope);
+            gen._output << ";; /else\n";
         }
     };
 
@@ -100,8 +114,10 @@ auto Generator::generateTerm(const node::Term &term) -> void {
         Generator& gen;
 
         auto operator()(const node::term::IntLit &intLit) const -> void {
+            gen._output << ";; intLit\n";
             gen._output << "    mov rax, " << intLit.token.value.value() << "\n";
             gen.push("rax");
+            gen._output << ";; /intLit\n";
         }
 
         auto operator()(const node::term::Ident &ident) const -> void {
@@ -110,17 +126,19 @@ auto Generator::generateTerm(const node::Term &term) -> void {
                     return var.name == ident.token.value.value();
                 });
             if (it == gen._vars.cend()) {
-                std::cerr << "Variable " << ident.token.value.value() << " not found" << std::endl;
-                exit(EXIT_FAILURE);
+                error("Variable not found",ident.token.location);
             }
-
+            gen._output << ";; ident\n";
             std::stringstream offset;
             offset << "QWORD [rsp + " << (gen._stackSize - it->stackLocation - 1) * 8 << "]";
             gen.push(offset.str());
+            gen._output << ";; /ident\n";
         }
 
         auto operator()(const node::term::Paren &paren) const -> void {
+            gen._output << ";; paren\n";
             gen.generateExpr(*paren.expr);
+            gen._output << ";; /paren\n";
         }
     };
     TermVisitor visitor{.gen = *this};

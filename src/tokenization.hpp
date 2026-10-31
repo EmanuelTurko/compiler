@@ -1,10 +1,13 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 #include <iostream>
 #include <optional>
 #include <unordered_map>
+
+#include "location.hpp"
 
 using std::isalpha;
 using std::isalnum;
@@ -59,12 +62,15 @@ inline auto binPrecedence(const TokenType &type) -> std::optional<int> {
 struct Token {
     TokenType type{};
     std::optional<std::string> value{};
+    Location location{};
+
+
 };
 
 class Tokenizer {
 public:
-    explicit Tokenizer(const std::string &src, const int index = 0) : _src(std::move(src)),
-                                                                      _index(index) {
+    explicit Tokenizer(std::string src) : _src(std::move(src))
+                                                                  {
     }
 
     [[nodiscard]] auto tokenize() -> std::vector<Token>;
@@ -78,18 +84,32 @@ private:
 
     [[nodiscard]] auto skipComment() -> bool;
 
-    auto tokenizeSymbol(std::vector<Token> &tokens) -> void;
+    auto tokenizeSymbol(std::vector<Token> &tokens, Location location) -> void;
 
     auto consume() -> char;
 
-
     const std::string _src;
-    size_t _index;
+    size_t _index{};
+    Location _location{};
+
+
     inline static const std::unordered_map<std::string_view, TokenType> _keywords= {
         {"exit", TokenType::exit},
         {"let", TokenType::let},
         {"if", TokenType::branchIf},
         {"elif", TokenType::branchElif},
         {"else", TokenType::branchElse}
+    };
+    inline static const std::unordered_map<char, TokenType> _symbols= {
+        {'(', TokenType::openParen},
+        {')', TokenType::closeParen},
+        {'{', TokenType::openCurly},
+        {'}', TokenType::closeCurly},
+        {'=', TokenType::eq},
+        {'+', TokenType::plus},
+        {'*', TokenType::mul},
+        {'-', TokenType::sub},
+        {'/', TokenType::div},
+        {';', TokenType::semi}
     };
 };

@@ -1,5 +1,7 @@
 #include "tokenization.hpp"
 
+#include "error.hpp"
+
 /** Turns the raw source text into a flat list of tokens. One pass, left to right, never goes back.
  *
  *  1. While there are characters left, peek at the current one (don't consume yet) and decide by its first char:
@@ -37,16 +39,26 @@ auto Tokenizer::tokenize() -> std::vector<Token> {
     std::vector<Token> tokens{};
 
     while (peek().has_value()) {
-        if (const auto c = peek().value(); isalpha(c))
-            tokens.push_back(tokenizeWord());
-        else if (isdigit(c))
-            tokens.push_back(tokenizeNum());
+        const auto startingLocation = _location;
+        if (const auto c = peek().value(); isalpha(c)) {
+            auto token = tokenizeWord();
+            token.location = startingLocation;
+            tokens.push_back(token);
+        }
+        else if (isdigit(c)) {
+            auto token = tokenizeNum();
+            token.location = startingLocation;
+            tokens.push_back(token);
+        }
         else if (skipComment())
             continue;
-        else
-            tokenizeSymbol(tokens);
+        else {
+
+        }
+            tokenizeSymbol(tokens,startingLocation);
     }
     _index = 0;
+    _location.reset();
     return tokens;
 }
 auto Tokenizer::peek(const size_t offset) const -> std::optional<char> {
@@ -71,44 +83,23 @@ auto Tokenizer::tokenizeNum() -> Token {
     return {.type = TokenType::intLit, .value = buf};
 }
 
-auto Tokenizer::tokenizeSymbol(std::vector<Token> &tokens) -> void {
-    switch (peek().value()) {
-        case '(': tokens.push_back({.type = TokenType::openParen});
-            break;
-        case ')': tokens.push_back({.type = TokenType::closeParen});
-            break;
-        case '{': tokens.push_back({.type = TokenType::openCurly});
-            break;
-        case '}': tokens.push_back({.type = TokenType::closeCurly});
-            break;
-            /*case '[': tokens.push_back({.type = TokenType::openSquare});
-                break;
-            case ']': tokens.push_back({.type = TokenType::closeSquare});
-                break;*/
-        case ';': tokens.push_back({.type = TokenType::semi});
-            break;
-        case '=': tokens.push_back({.type = TokenType::eq});
-            break;
-        case '+': tokens.push_back({.type = TokenType::plus});
-            break;
-        case '*': tokens.push_back({.type = TokenType::mul});
-            break;
-        case '-': tokens.push_back({.type = TokenType::sub});
-            break;
-        case '/': tokens.push_back({.type = TokenType::div});
-            break;
-        case ' ':
-        case '\n':
-        case '\t':
-        case '\r': break;
-        default:
-            std::cerr << "Unexpected symbol: " << peek().value() << std::endl;
-            exit(EXIT_FAILURE);
+auto Tokenizer::tokenizeSymbol(std::vector<Token> &tokens, const Location location) -> void {
+    if (const auto val = peek().value(); std::isspace(val)) {
+        consume();
+        return;
     }
-    consume();
+    else if (const auto it = _symbols.find(val); it != _symbols.cend()) {
+        tokens.push_back({.type = it->second, .value = {}, .location = location});
+        consume();
+        return;
+    }
+    error("Unexpected symbol",location);
 }
 auto Tokenizer::consume() -> char {
-    return _src[_index++];
+    const auto c = _src[_index];
+    _location.advance(c);
+    _index++;
+    return c;
 }
 
 auto Tokenizer::skipComment() -> bool {
@@ -130,16 +121,11 @@ auto Tokenizer::skipComment() -> bool {
                 }
                 consume();
             }
-            std::cerr << "Unexpected end of file." << std::endl;
-            exit(EXIT_FAILURE);
+            error("Unexpected end of file",_location);
         }
     }
     return false;
 }
-
-
-
-
 
 
 
