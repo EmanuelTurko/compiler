@@ -14,7 +14,7 @@ auto Parser::parseProgram() -> optional<node::Program> {
         if (auto stmt = tryParseStmt()) {
             program.stmts.push_back(std::move(stmt.value()));
         } else {
-            error("Invalid statement",peek().value().location);
+            error("Invalid statement",getLocation());
         }
     }
     return program;
@@ -95,7 +95,7 @@ auto Parser::parseExpr() -> Expr {
     if (auto expr = tryParseExpr()) {
         return std::move(expr.value());
     }
-    error("Unable to parse expression",peek().value().location);
+    error("Unable to parse expression",getLocation());
 }
 /** 1. Read one term: every expression (Expr) starts with a term.
  *     If there is no term, there is no expression: return nullopt and let the caller decide if that's an error.
@@ -154,7 +154,7 @@ auto Parser::tryParseExpr(int minPrecedence) -> optional<Expr> {
         const auto token = consume();
         auto rhs = tryParseExpr(precedence.value() + 1);
         if (!rhs.has_value()) {
-            error("Unable to parse expression",peek().value().location);
+            error("Unable to parse expression",getLocation());
         }
         switch (token.type) {
             case TokenType::plus: {
@@ -187,7 +187,7 @@ auto Parser::tryParseTerm() -> optional<node::Term> {
     if (tryConsume(TokenType::openParen)) {
         auto expr = tryParseExpr();
         if (!expr.has_value()) {
-            error("Expected expression",peek().value().location);
+            error("Expected expression",getLocation());
         }
         tryConsume(TokenType::closeParen, "Expected ')'");
         auto parenExpr = node::term::Paren{.expr = make_unique<Expr>(std::move(expr.value()))};
@@ -231,12 +231,20 @@ auto Parser::tryConsume(const TokenType type) -> optional<Token> {
     return nullopt;
 }
 auto Parser::tryConsume(const TokenType type, const std::string &errMsg) -> Token {
-    if (peek().has_value() && peek().value().type == type)
+    if (peek().has_value() && peek().value().type == type) {
         return consume();
-    error(errMsg,peek().value().location);
+    }
+    error(errMsg,getLocation());
 }
 auto Parser::consume() -> Token {
     return _tokens[_index++];
+}
+
+auto Parser::getLocation() const -> Location {
+    if (peek().has_value()) {
+        return peek().value().location;
+    }
+    return _tokens.empty()? Location{} : _tokens[_index-1].location;
 }
 template<typename T>
 auto Parser::constructExpr(Expr lhs, Expr rhs) -> Expr {

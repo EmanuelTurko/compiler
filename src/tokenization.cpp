@@ -1,5 +1,8 @@
 #include "tokenization.hpp"
 
+#include <charconv>
+#include <cstdint>
+
 #include "error.hpp"
 
 /** Turns the raw source text into a flat list of tokens. One pass, left to right, never goes back.
@@ -53,9 +56,8 @@ auto Tokenizer::tokenize() -> std::vector<Token> {
         else if (skipComment())
             continue;
         else {
-
-        }
             tokenizeSymbol(tokens,startingLocation);
+        }
     }
     _index = 0;
     _location.reset();
@@ -77,12 +79,18 @@ auto Tokenizer::tokenizeWord() -> Token {
 }
 auto Tokenizer::tokenizeNum() -> Token {
     std::string buf{};
+    const auto startLocation = _location;
 
     while (peek().has_value() && isdigit(peek().value()))
         buf.push_back(consume());
-    return {.type = TokenType::intLit, .value = buf};
-}
 
+    std::int64_t parsed{};
+    if (const auto returnVal = std::from_chars(buf.data(),buf.data()+buf.size(),parsed);
+        returnVal.ec == std::errc()) {
+        return {.type = TokenType::intLit, .value = buf};
+    }
+    error("integer overflow",startLocation);
+}
 auto Tokenizer::tokenizeSymbol(std::vector<Token> &tokens, const Location location) -> void {
     if (const auto val = peek().value(); std::isspace(val)) {
         consume();

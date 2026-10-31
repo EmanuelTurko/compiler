@@ -34,9 +34,9 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             if (it != gen._vars.cend()) {
                 error("Variable already exists",let.token.location);
             }
-            gen._vars.push_back({.name = let.token.value.value(), .stackLocation = gen._stackSize});
-            gen._output << ";; let\n";
             gen.generateExpr(let.expr);
+            gen._vars.push_back({.name = let.token.value.value(), .stackLocation = gen._stackSize-1});
+            gen._output << ";; let\n";
             gen._output << ";; /let\n";
         }
 
@@ -57,21 +57,26 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             gen._output << ";; assignment\n";
             gen.generateExpr(assignment.expr);
             gen.pop("rax");
-            gen._output << "    mov [rsp + " << gen._stackSize - it->stackLocation << "],rax\n";
+            gen._output << "    mov [rsp + " << (gen._stackSize - it->stackLocation-1)*8<< "],rax\n";
             gen._output << ";; /assignment\n";
 
         }
-        auto operator()(const node::stmt::If &_if) const -> void {
+
+        auto operator()(const node::stmt::If &if_) const -> void {
             gen._output << ";; if\n";
-            gen.generateExpr(_if.cond);
+            gen.generateExpr(if_.cond);
             gen.pop("rax");
 
             auto label = gen.makeLabel();
             gen._output << "    test rax, rax\n";
             gen._output << "    jz " << label << "\n";
-            gen.generateScope(_if.scope);
+            auto endLabel = gen.makeLabel();
+            gen.generateScope(if_.scope);
+            gen._output << "    jmp " << endLabel << "\n";
             gen._output << label << ":\n";
-            if (_if.next) gen.generateIfPred(*_if.next,label);
+            if (if_.next)
+                gen.generateIfPred(*if_.next, endLabel);
+            gen._output << endLabel << ":\n";
             gen._output << ";; /if\n";
         }
     };
@@ -84,24 +89,24 @@ auto Generator::generateIfPred(const node::IfPred &ifPred, std::string& endLabel
     struct PredVisitor {
         Generator& gen;
         std::string& endLabel;
-        auto operator()(const node::pred::Elif &predElif) const -> void {
+        auto operator()(const node::pred::Elif &elif_) const -> void {
 
             gen._output << ";; elif\n";
-            gen.generateExpr(predElif.cond);
+            gen.generateExpr(elif_.cond);
             gen.pop("rax");
 
             const auto label = gen.makeLabel();
             gen._output << "    test rax, rax\n";
             gen._output << "    jz " << label << "\n";
-            gen.generateScope(predElif.scope);
+            gen.generateScope(elif_.scope);
             gen._output << "    jmp " << endLabel << "\n";
             gen._output << label << ":\n";
-            if (predElif.next) gen.generateIfPred(*predElif.next,endLabel);
+            if (elif_.next) gen.generateIfPred(*elif_.next,endLabel);
             gen._output << ";; /elif\n";
         }
-        auto operator()(const node::pred::Else &predElse) const -> void {
+        auto operator()(const node::pred::Else &else_) const -> void {
             gen._output << ";; else\n";
-            gen.generateScope(predElse.scope);
+            gen.generateScope(else_.scope);
             gen._output << ";; /else\n";
         }
     };
@@ -183,7 +188,7 @@ auto Generator::generateBinExpr(const node::expr::Binary &bin) -> void {
             gen.generateExpr(*mul.lhs);
             gen.pop("rax");
             gen.pop("rbx");
-            gen._output << "    mul rbx\n";
+            gen._output << "    imul rax,rbx\n";
             gen.push("rax");
         }
         auto operator()(const node::expr::Div &div) const -> void {
@@ -191,7 +196,8 @@ auto Generator::generateBinExpr(const node::expr::Binary &bin) -> void {
             gen.generateExpr(*div.lhs);
             gen.pop("rax");
             gen.pop("rbx");
-            gen._output << "    div rbx\n";
+            gen._output << "    cqo\n";
+            gen._output << "    idiv rbx\n";
             gen.push("rax");
         }
     };
@@ -219,7 +225,7 @@ auto Generator::beginScope() -> void {
 }
 auto Generator::endScope() -> void {
     const size_t popCount = _vars.size() - _scopes.back();
-    _output << "    add rsp, " << popCount << "\n";
+    _output << "    add rsp, " << popCount*8 << "\n";
     _stackSize -= popCount;
     for (size_t i{}; i < popCount; i++) _vars.pop_back();
     _scopes.pop_back();

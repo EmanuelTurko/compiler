@@ -6,7 +6,7 @@ struct Location {
     size_t col;
 
     Location(): line(1), col(1) {}
-    auto reset()->void { Location();}
+    auto reset()->void { line = 1, col = 1; }
     auto advance(const char c) -> void {
         if (c == '\n') {
             col = 1;

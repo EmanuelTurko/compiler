@@ -129,14 +129,13 @@ private:
     auto tryParseTerm() -> optional<node::Term>;
     auto tryParseIfPred() -> unique_ptr<node::IfPred>;
 
-    [[nodiscard]] auto peek(size_t offset = 0) const -> optional<Token>;
-
     auto tryConsume(TokenType type) -> optional<Token>;
     auto tryConsume(TokenType type, const std::string &errMsg) -> Token;
     auto consume() -> Token;
 
 
-
+    [[nodiscard]] auto peek(size_t offset = 0) const -> optional<Token>;
+    [[nodiscard]] auto getLocation() const -> Location;
     template<typename T>
     [[nodiscard]] auto constructExpr(node::Expr lhs,node::Expr rhs) -> node::Expr;
 
