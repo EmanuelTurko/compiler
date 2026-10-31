@@ -61,45 +61,43 @@ auto Parser::tryParseStmt() -> optional<Stmt> {
     if (!peek().has_value()) return nullopt;
 
     switch (peek().value().type) {
-        case TokenType::let:
+        case TokenType::kwDef:
             return Stmt{.var = parseStmtLet()};
-        case TokenType::exit:
-            return Stmt{.var = parseStmtExit()};
+        case TokenType::kwRet:
+            return Stmt{.var = parseStmtRet()};
         case TokenType::openCurly:
             return Stmt{.var = parseScope()};
         case TokenType::ident:
             return Stmt{.var = parseAssignment()};
-        case TokenType::branchIf:
+        case TokenType::kwIf:
             return Stmt{.var = parseStmtBranchIf()};
         default:
             return nullopt;
     }
 }
-auto Parser::parseScope() -> node::Scope {
+auto Parser::parseScope() -> node::Block {
     // Statement: { let x = 5; }
     consume(); // |{| let x = 5; }
-    node::Scope scope{}; //
+    node::Block scope{}; //
     while (auto stmt = tryParseStmt()) // recursion to parse the entire scoped stmt { | let x = 5; | }
         scope.stmts.push_back(std::move(stmt.value())); //
     tryConsume(TokenType::closeCurly, "expected '}'"); // { let x = 5; |}|
     return scope;
 }
-auto Parser::parseStmtLet() -> node::stmt::Let {
+auto Parser::parseStmtLet() -> node::stmt::Def {
     consume();
     auto token = tryConsume(TokenType::ident, "expected identifier");
-    tryConsume(TokenType::eq, "expected '=' after identifier");
+    tryConsume(TokenType::assign, "expected '=' after identifier");
     auto expr = parseExpr();
     tryConsume(TokenType::semi, "expected ';'");
-    return node::stmt::Let{.token = std::move(token), .expr = std::move(expr)};
+    return node::stmt::Def{.token = std::move(token), .expr = std::move(expr)};
 }
-auto Parser::parseStmtExit() -> node::stmt::Exit {
+auto Parser::parseStmtRet() -> node::stmt::Ret {
     // Statement: exit(x);
     consume(); // |exit|(x);
-    tryConsume(TokenType::openParen, "expected '('"); // exit|(|x);
     auto expr = parseExpr(); // exit(|x|);
-    tryConsume(TokenType::closeParen, "expected ')'"); // exit(x|)|;
     tryConsume(TokenType::semi, "expected ';'"); //exit(x)|;|
-    return node::stmt::Exit{.expr = std::move(expr)};
+    return node::stmt::Ret{.expr = std::move(expr)};
 }
 auto Parser::parseStmtBranchIf() -> node::stmt::If {
     // if(x > 5) { do stuff; }
@@ -109,7 +107,7 @@ auto Parser::parseStmtBranchIf() -> node::stmt::If {
     auto next = tryParseIfPred();
     return node::stmt::If{
         .cond = std::move(cond),
-        .scope = std::move(scope),
+        .block = std::move(scope),
         .next = std::move(next)
     };
 }
@@ -123,7 +121,7 @@ auto Parser::parseCondition() -> node::Expr {
 
 auto Parser::parseAssignment() -> node::stmt::Assignment {
     const auto token = consume(); // get the target
-    tryConsume(TokenType::eq, "Expected '='");
+    tryConsume(TokenType::assign, "Expected '='");
     auto expr = parseExpr();
     tryConsume(TokenType::semi, "Expected ';'");
     return {.token = token,.expr = std::move(expr)};
@@ -199,15 +197,15 @@ auto Parser::tryParseExpr(int minPrecedence) -> optional<Expr> {
                 lhs = constructExpr<node::expr::Add>(std::move(lhs), std::move(rhs.value()));
                 break;
             }
-            case TokenType::mul: {
+            case TokenType::star: {
                 lhs = constructExpr<node::expr::Mul>(std::move(lhs), std::move(rhs.value()));
                 break;
             }
-            case TokenType::sub: {
+            case TokenType::minus: {
                 lhs = constructExpr<node::expr::Sub>(std::move(lhs), std::move(rhs.value()));
                 break;
             }
-            case TokenType::div: {
+            case TokenType::slash: {
                 lhs = constructExpr<node::expr::Div>(std::move(lhs), std::move(rhs.value()));
                 break;
             }
@@ -218,7 +216,7 @@ auto Parser::tryParseExpr(int minPrecedence) -> optional<Expr> {
     return lhs;
 }
 auto Parser::tryParseTerm() -> optional<node::Term> {
-    if (const auto &token = tryConsume(TokenType::intLit))
+    if (const auto &token = tryConsume(TokenType::litInt))
         return node::Term{.var = node::term::IntLit{.token = token.value()}};
     if (const auto &token = tryConsume(TokenType::ident))
         return node::Term{.var = node::term::Ident{.token = token.value()}};
@@ -235,7 +233,7 @@ auto Parser::tryParseTerm() -> optional<node::Term> {
 }
 
 auto Parser::tryParseIfPred() -> unique_ptr<node::IfPred> {
-    if (tryConsume(TokenType::branchElif)) {
+    if (tryConsume(TokenType::kwElif)) {
         auto cond = parseCondition();
         auto scope = parseScope();
 
@@ -248,7 +246,7 @@ auto Parser::tryParseIfPred() -> unique_ptr<node::IfPred> {
                 }
             });
     }
-    if (tryConsume(TokenType::branchElse)) {
+    if (tryConsume(TokenType::kwElse)) {
         return make_unique<node::IfPred>(
             node::IfPred{
                 .var = node::pred::Else{

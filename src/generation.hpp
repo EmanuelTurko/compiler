@@ -76,7 +76,7 @@ private:
 
     auto generateBinExpr(const node::expr::Binary &bin) -> void;
 
-    auto generateScope(const node::Scope &scope) -> void;
+    auto generateScope(const node::Block &scope) -> void;
 
     auto generateIfPred(const node::IfPred &ifPred, std::string& endLabel) -> void;
 

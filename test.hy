@@ -1,1 +1,1 @@
-let x = 0; if(1){ x = 5; } else { x = 9; } exit(x);
+def x = 69; if(0){ x = 5; }ret x;

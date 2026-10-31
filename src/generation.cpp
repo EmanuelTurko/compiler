@@ -62,14 +62,14 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
     struct StmtVisitor {
         Generator& gen;
 
-        auto operator()(const node::stmt::Exit &exit) const -> void {
+        auto operator()(const node::stmt::Ret &exit) const -> void {
             gen.generateExpr(exit.expr);
             gen._output << "    mov rax,60\n";
             gen.pop("rdi");
             gen._output << "    syscall\n\n";
         }
 
-        auto operator()(const node::stmt::Let &let) const -> void {
+        auto operator()(const node::stmt::Def &let) const -> void {
             const auto it = std::ranges::find_if(
                 std::as_const(gen._vars), [&](const Var &var) -> bool {
                     return var.name == let.token.value.value();
@@ -81,7 +81,7 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             gen._vars.push_back({.name = let.token.value.value(), .stackLocation = gen._stackSize-1});
         }
 
-        auto operator()(const node::Scope &scope) const -> void {
+        auto operator()(const node::Block &scope) const -> void {
             gen.generateScope(scope);
         }
         auto operator()(const node::stmt::Assignment &assignment) const -> void {
@@ -107,7 +107,7 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             gen._output << "    test rax, rax\n";
             gen._output << "    jz " << label << "\n";
             auto endLabel = gen.makeLabel();
-            gen.generateScope(if_.scope);
+            gen.generateScope(if_.block);
             gen._output << "    jmp " << endLabel << "\n";
             gen._output << label << ":\n";
             if (if_.next)
@@ -229,7 +229,7 @@ auto Generator::generateBinExpr(const node::expr::Binary &bin) -> void {
     BinExprVisitor visitor{.gen = *this};
     std::visit(visitor, bin.var);
 }
-auto Generator::generateScope(const node::Scope &scope) -> void {
+auto Generator::generateScope(const node::Block &scope) -> void {
     beginScope();
     for (const auto &stmt: scope.stmts)
         generateStmt(stmt);

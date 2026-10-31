@@ -15,45 +15,43 @@ using std::isdigit;
 using std::isspace;
 
 enum class TokenType {
-    exit,
-    intLit,
-    semi,
-    openParen,
-    closeParen,
-    ident,
-    let,
-    eq,
-    plus,
-    mul,
-    sub,
-    div,
-    openCurly,
-    closeCurly,
-    branchIf,
-    branchElif,
-    branchElse,
-};
+    //literals and names
+    litInt,ident,litString,litBool,
 
-inline auto isBinOp(const TokenType &type) -> bool {
-    switch (type) {
-        case TokenType::plus:
-        case TokenType::mul:
-        case TokenType::sub:
-        case TokenType::div:
-            return true;
-        default:
-            return false;
-    }
-}
+    //keywords
+    kwIf,kwElif,kwElse,kwWhile,kwRet,kwDef,kwFun,kwInt,kwBool,kwString,kwTrue,kwFalse,
+
+    // punctuation
+    openParen,closeParen,openCurly,closeCurly,comma,semi,arrow,
+
+    //operators
+    assign,plus,star,minus,slash,eq,neq,less,greater,greaterEq,lessEq,logicalAnd,logicalOr,logicalNot,inc,dec,
+    percent
+};
 
 inline auto binPrecedence(const TokenType &type) -> std::optional<int> {
     switch (type) {
-        case TokenType::plus:
-        case TokenType::sub:
+        case TokenType::assign:
             return 0;
-        case TokenType::mul:
-        case TokenType::div:
+        case TokenType::logicalOr:
             return 1;
+        case TokenType::logicalAnd:
+            return 2;
+        case TokenType::eq:
+        case TokenType::neq:
+            return 3;
+        case TokenType::less:
+           case TokenType::greater:
+        case TokenType::lessEq:
+            case TokenType::greaterEq:
+            return 4;
+        case TokenType::plus:
+        case TokenType::minus:
+            return 5;
+        case TokenType::slash:
+        case TokenType::star:
+        case TokenType::percent:
+            return 6;
         default:
             return std::nullopt;
     }
@@ -82,8 +80,9 @@ private:
 
     [[nodiscard]] auto tokenizeNum() -> Token;
 
-    [[nodiscard]] auto skipComment() -> bool;
+    [[nodiscard]] auto trySkipComment() -> bool;
 
+    auto tryTokenizeDoubleSymbol(std::vector<Token>& tokens,Location location) -> bool;
     auto tokenizeSymbol(std::vector<Token> &tokens, Location location) -> void;
 
     auto consume() -> char;
@@ -94,22 +93,38 @@ private:
 
 
     inline static const std::unordered_map<std::string_view, TokenType> _keywords= {
-        {"exit", TokenType::exit},
-        {"let", TokenType::let},
-        {"if", TokenType::branchIf},
-        {"elif", TokenType::branchElif},
-        {"else", TokenType::branchElse}
+        {"ret", TokenType::kwRet},
+        {"def", TokenType::kwDef},
+        {"if", TokenType::kwIf},
+        {"elif", TokenType::kwElif},
+        {"else", TokenType::kwElse}
     };
     inline static const std::unordered_map<char, TokenType> _symbols= {
         {'(', TokenType::openParen},
         {')', TokenType::closeParen},
         {'{', TokenType::openCurly},
         {'}', TokenType::closeCurly},
-        {'=', TokenType::eq},
+        {'=', TokenType::assign},
         {'+', TokenType::plus},
-        {'*', TokenType::mul},
-        {'-', TokenType::sub},
-        {'/', TokenType::div},
-        {';', TokenType::semi}
+        {'*', TokenType::star},
+        {'-', TokenType::minus},
+        {'/', TokenType::slash},
+        {';', TokenType::semi},
+        {',', TokenType::comma},
+        {'%', TokenType::percent},
+        {'<', TokenType::less},
+        {'>', TokenType::greater},
+        {'!', TokenType::logicalNot},
+    };
+    inline static const std::unordered_map<std::string_view,TokenType> _doubleSymbols= {
+        {"&&", TokenType::logicalAnd},
+        {"||", TokenType::logicalOr},
+        {"==", TokenType::eq},
+        {"!=", TokenType::neq},
+        {"<=", TokenType::lessEq},
+        {">=", TokenType::greaterEq},
+        {"->", TokenType::arrow},
+        {"++",TokenType::inc},
+        {"--",TokenType::dec}
     };
 };

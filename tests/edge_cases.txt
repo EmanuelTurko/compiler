@@ -1,103 +1,103 @@
-# Hydrogen compiler edge cases. Format: expected_exit_code | program (one line, \n \t \r escapes allowed). "err" = compiler must reject.
+# Compiler edge cases (new syntax: def / ret). Format: expected_exit_code | program (one line, \n \t \r escapes allowed). "err" = compiler must reject.
 # arithmetic
-7   | exit(1 + 2 * 3);
-5   | exit(10 - 3 - 2);
-7   | exit(10 - 2 * 3 / 2);
-2   | exit((10 - 2 * 3) / 2);
-254 | let a = 0 - 6; exit(a / 3);
-254 | let a = 0 - 1; exit(a * 2 / 1);
-# let / scopes
-7   | let x = 7; { let y = 2; } exit(x);
-2   | let x = 7; { let y = 2; exit(y); }
-7   | let x = 7; if(x){ let y = 2; } exit(x);
-err | let x = 1; let x = 2; exit(x);
-err | exit(y);
-err | { let y = 1; } exit(y);
+7   | ret 1 + 2 * 3;
+5   | ret 10 - 3 - 2;
+7   | ret 10 - 2 * 3 / 2;
+2   | ret (10 - 2 * 3) / 2;
+254 | def a = 0 - 6; ret a / 3;
+254 | def a = 0 - 1; ret a * 2 / 1;
+# def / scopes
+7   | def x = 7; { def y = 2; } ret x;
+2   | def x = 7; { def y = 2; ret y; }
+7   | def x = 7; if(x){ def y = 2; } ret x;
+err | def x = 1; def x = 2; ret x;
+err | ret y;
+err | { def y = 1; } ret y;
 # if / elif / else
-5   | let x = 2; if(x){ exit(5); } exit(1);
-1   | let x = 0; if(x){ exit(5); } exit(1);
-42  | let x = 2; if(0){ exit(5); } elif(0){ exit(69); } elif(0){ exit(55); } else{ exit(42); } exit(1);
-69  | if(0){ exit(5); } elif(1){ exit(69); } else{ exit(42); }
-3   | if(0){ exit(5); } elif(0){ exit(6); } exit(3);
-3   | if(1){ let a = 1; } elif(1){ exit(9); } exit(3);
-3   | if(1){ let a = 1; } else { exit(9); } exit(3);
-3   | if(0){ } elif(1){ let a = 1; } exit(3);
-7   | let x = 7; if(0){ } else{ let y = 1; } exit(x);
-4   | let x = 1; if(x){ if(0){ exit(2);} else { let z = 4; exit(z);} }
-err | else { exit(1); }
-err | elif(1) { exit(1); }
+5   | def x = 2; if(x){ ret 5; } ret 1;
+1   | def x = 0; if(x){ ret 5; } ret 1;
+42  | def x = 2; if(0){ ret 5; } elif(0){ ret 69; } elif(0){ ret 55; } else{ ret 42; } ret 1;
+69  | if(0){ ret 5; } elif(1){ ret 69; } else{ ret 42; }
+3   | if(0){ ret 5; } elif(0){ ret 6; } ret 3;
+3   | if(1){ def a = 1; } elif(1){ ret 9; } ret 3;
+3   | if(1){ def a = 1; } else { ret 9; } ret 3;
+3   | if(0){ } elif(1){ def a = 1; } ret 3;
+7   | def x = 7; if(0){ } else{ def y = 1; } ret x;
+4   | def x = 1; if(x){ if(0){ ret 2;} else { def z = 4; ret z;} }
+err | else { ret 1; }
+err | elif(1) { ret 1; }
 # assignment
-5   | let x = 1; x = 5; exit(x);
-9   | let x = 1; let y = 2; x = 9; exit(x);
-2   | let x = 1; let y = 2; x = 9; exit(y);
-6   | let x = 1; x = x + 5; exit(x);
-5   | let x = 1; { x = 5; } exit(x);
-5   | let x = 1; { let y = 3; x = 5; } exit(x);
-err | x = 5; exit(x);
-err | let x = 1; x 5;
+5   | def x = 1; x = 5; ret x;
+9   | def x = 1; def y = 2; x = 9; ret x;
+2   | def x = 1; def y = 2; x = 9; ret y;
+6   | def x = 1; x = x + 5; ret x;
+5   | def x = 1; { x = 5; } ret x;
+5   | def x = 1; { def y = 3; x = 5; } ret x;
+err | x = 5; ret x;
+err | def x = 1; x 5;
 # comments / tokenizer
-5   | let x = 10; /* block * comment */ exit(x / 2); // tail
-5   | exit(5); // no newline at end
-3   | /**/ exit(3);
-err | /* never closed exit(1);
-err | exit(1) $;
+5   | def x = 10; /* block * comment */ ret x / 2; // tail
+5   | ret 5; // no newline at end
+3   | /**/ ret 3;
+err | /* never closed ret 1;
+err | ret 1 $;
 # --- end-of-series pressure test (7a16580) ---
 # arithmetic: chains, precedence, parens
-10  | exit(1+1+1+1+1+1+1+1+1+1);
-4   | exit(2*3*4/6);
-1   | exit(20/4/5);
-25  | exit(100-50-25);
-14  | exit(2*(3+4));
-1   | exit(((((1+2)*3)-4)/5));
-17  | let a=6; let b=3; exit(a/b + a*b - b);
-255 | exit(0-1);
-44  | exit(300);
-err | exit(99999999999999999999);
+10  | ret 1+1+1+1+1+1+1+1+1+1;
+4   | ret 2*3*4/6;
+1   | ret 20/4/5;
+25  | ret 100-50-25;
+14  | ret 2*(3+4);
+1   | ret ((((1+2)*3)-4)/5);
+17  | def a=6; def b=3; ret a/b + a*b - b;
+255 | ret 0-1;
+44  | ret 300;
+err | ret 99999999999999999999;
 # program shape
 0   |
 0   | // only a comment
 0   |    \n\t\n
-1   | exit(1); exit(2);
-3   | let x = 3;\r\n\texit(x);\r\n
+1   | ret 1; ret 2;
+3   | def x = 3;\r\n\tret x;\r\n
 # identifiers / keywords
-3   | let iff = 3; exit(iff);
-4   | let exit1 = 4; exit(exit1);
-2   | let letx = 2; exit(letx);
-1   | let X = 1; let x = 2; exit(X);
-err | let let = 5; exit(let);
-err | let 1x = 2;
-# let semantics
-err | let x = x; exit(x);
-3   | let x = 3; let y = x; { let z = y; exit(z); }
-3   | let a = 1; { let b = 2; { let c = 3; } exit(a + b); }
-5   | { let y = 1; } let y = 5; exit(y);
-50  | let v1 = 1; let v2 = 2; let v3 = 3; let v4 = 4; let v5 = 5; let v6 = 6; let v7 = 7; let v8 = 8; let v9 = 9; let v10 = 10; let v11 = 11; let v12 = 12; let v13 = 13; let v14 = 14; let v15 = 15; let v16 = 16; let v17 = 17; let v18 = 18; let v19 = 19; let v20 = 20; let v21 = 21; let v22 = 22; let v23 = 23; let v24 = 24; let v25 = 25; let v26 = 26; let v27 = 27; let v28 = 28; let v29 = 29; let v30 = 30; let v31 = 31; let v32 = 32; let v33 = 33; let v34 = 34; let v35 = 35; let v36 = 36; let v37 = 37; let v38 = 38; let v39 = 39; let v40 = 40; let v41 = 41; let v42 = 42; let v43 = 43; let v44 = 44; let v45 = 45; let v46 = 46; let v47 = 47; let v48 = 48; let v49 = 49; let v50 = 50; exit(v50);
-1   | let v1 = 1; let v2 = 2; let v3 = 3; let v4 = 4; let v5 = 5; let v6 = 6; let v7 = 7; let v8 = 8; let v9 = 9; let v10 = 10; let v11 = 11; let v12 = 12; let v13 = 13; let v14 = 14; let v15 = 15; let v16 = 16; let v17 = 17; let v18 = 18; let v19 = 19; let v20 = 20; let v21 = 21; let v22 = 22; let v23 = 23; let v24 = 24; let v25 = 25; let v26 = 26; let v27 = 27; let v28 = 28; let v29 = 29; let v30 = 30; let v31 = 31; let v32 = 32; let v33 = 33; let v34 = 34; let v35 = 35; let v36 = 36; let v37 = 37; let v38 = 38; let v39 = 39; let v40 = 40; let v41 = 41; let v42 = 42; let v43 = 43; let v44 = 44; let v45 = 45; let v46 = 46; let v47 = 47; let v48 = 48; let v49 = 49; let v50 = 50; exit(v1);
+3   | def iff = 3; ret iff;
+4   | def ret1 = 4; ret ret1;
+2   | def defx = 2; ret defx;
+1   | def X = 1; def x = 2; ret X;
+err | def def = 5; ret def;
+err | def 1x = 2;
+# def semantics
+err | def x = x; ret x;
+3   | def x = 3; def y = x; { def z = y; ret z; }
+3   | def a = 1; { def b = 2; { def c = 3; } ret a + b; }
+5   | { def y = 1; } def y = 5; ret y;
+50  | def v1 = 1; def v2 = 2; def v3 = 3; def v4 = 4; def v5 = 5; def v6 = 6; def v7 = 7; def v8 = 8; def v9 = 9; def v10 = 10; def v11 = 11; def v12 = 12; def v13 = 13; def v14 = 14; def v15 = 15; def v16 = 16; def v17 = 17; def v18 = 18; def v19 = 19; def v20 = 20; def v21 = 21; def v22 = 22; def v23 = 23; def v24 = 24; def v25 = 25; def v26 = 26; def v27 = 27; def v28 = 28; def v29 = 29; def v30 = 30; def v31 = 31; def v32 = 32; def v33 = 33; def v34 = 34; def v35 = 35; def v36 = 36; def v37 = 37; def v38 = 38; def v39 = 39; def v40 = 40; def v41 = 41; def v42 = 42; def v43 = 43; def v44 = 44; def v45 = 45; def v46 = 46; def v47 = 47; def v48 = 48; def v49 = 49; def v50 = 50; ret v50;
+1   | def v1 = 1; def v2 = 2; def v3 = 3; def v4 = 4; def v5 = 5; def v6 = 6; def v7 = 7; def v8 = 8; def v9 = 9; def v10 = 10; def v11 = 11; def v12 = 12; def v13 = 13; def v14 = 14; def v15 = 15; def v16 = 16; def v17 = 17; def v18 = 18; def v19 = 19; def v20 = 20; def v21 = 21; def v22 = 22; def v23 = 23; def v24 = 24; def v25 = 25; def v26 = 26; def v27 = 27; def v28 = 28; def v29 = 29; def v30 = 30; def v31 = 31; def v32 = 32; def v33 = 33; def v34 = 34; def v35 = 35; def v36 = 36; def v37 = 37; def v38 = 38; def v39 = 39; def v40 = 40; def v41 = 41; def v42 = 42; def v43 = 43; def v44 = 44; def v45 = 45; def v46 = 46; def v47 = 47; def v48 = 48; def v49 = 49; def v50 = 50; ret v1;
 # if conditions are expressions
-2   | let x = 3; if(x - 3){ exit(1); } exit(2);
-5   | let x = 4; if(1){ let y = 1; x = 5; } exit(x);
-6   | let x = 0; if(x){ x = 1; } elif(x + 1){ x = 6; } else { x = 7; } exit(x);
-5   | let x = 0; if(1){ x = 5; } else { x = 9; } exit(x);
-5   | let x = 0; if(1){ x = 5; } elif(1){ x = 7; } exit(x);
+2   | def x = 3; if(x - 3){ ret 1; } ret 2;
+5   | def x = 4; if(1){ def y = 1; x = 5; } ret x;
+6   | def x = 0; if(x){ x = 1; } elif(x + 1){ x = 6; } else { x = 7; } ret x;
+5   | def x = 0; if(1){ x = 5; } else { x = 9; } ret x;
+5   | def x = 0; if(1){ x = 5; } elif(1){ x = 7; } ret x;
 # tokenizer: tokens glued together, comments glued to numbers/words
-3   | let x=3;exit(x);
-4   | exit(/*a*/4/*b*/);
-8   | let x = 8// c\n; exit(x);
-8   | let x = 8/*c*/; exit(x);
-2   | let x = 2/*c*/; exit(x/*c*/);
-2   | /* multi\nline ** comment */ exit(2);
-err | exit(1); /* unterminated at end
+3   | def x=3;ret x;
+4   | ret /*a*/4/*b*/;
+8   | def x = 8// c\n; ret x;
+8   | def x = 8/*c*/; ret x;
+2   | def x = 2/*c*/; ret x/*c*/;
+2   | /* multi\nline ** comment */ ret 2;
+err | ret 1; /* unterminated at end
 # syntax errors that must be rejected (not crash)
-err | let = 5;
-err | exit();
-err | exit(1)
-err | exit(1 + );
-err | exit((1);
-err | { exit(1);
+err | def = 5;
+err | ret ();
+err | ret 1
+err | ret 1 +;
+err | ret (1;
+err | { ret 1;
 err | }
-err | if(1) exit(1);
-err | if 1 { exit(1); }
-err | let x = 1; x = ;
-err | exit(1 2);
-err | let x = 5
-err | let a_b = 1; exit(a_b);
+err | if(1) ret 1;
+err | if 1 { ret 1; }
+err | def x = 1; x = ;
+err | ret 1 2;
+err | def x = 5
+err | def a_b = 1; ret a_b;

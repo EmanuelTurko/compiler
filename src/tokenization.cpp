@@ -64,11 +64,9 @@ auto Tokenizer::tokenize() -> std::vector<Token> {
             token.location = startingLocation;
             tokens.push_back(token);
         }
-        else if (skipComment())
-            continue;
-        else {
-            tokenizeSymbol(tokens,startingLocation);
-        }
+        else if (trySkipComment()) continue;
+        else if (tryTokenizeDoubleSymbol(tokens,startingLocation)) continue;
+        else tokenizeSymbol(tokens,startingLocation);
     }
     _index = 0;
     _location.reset();
@@ -98,7 +96,7 @@ auto Tokenizer::tokenizeNum() -> Token {
     std::int64_t parsed{};
     if (const auto returnVal = std::from_chars(buf.data(),buf.data()+buf.size(),parsed);
         returnVal.ec == std::errc()) {
-        return {.type = TokenType::intLit, .value = buf};
+        return {.type = TokenType::litInt, .value = buf};
     }
     error("integer overflow",startLocation);
 }
@@ -121,7 +119,7 @@ auto Tokenizer::consume() -> char {
     return c;
 }
 
-auto Tokenizer::skipComment() -> bool {
+auto Tokenizer::trySkipComment() -> bool {
     if (peek().value() == '/') {
         if (peek(1).has_value() && peek(1).value() == '/') {
             consume();
@@ -144,6 +142,20 @@ auto Tokenizer::skipComment() -> bool {
         }
     }
     return false;
+}
+
+auto Tokenizer::tryTokenizeDoubleSymbol(std::vector<Token>& tokens, Location location) -> bool {
+    if (peek(1).has_value()) {
+       const auto s = std::string_view(_src).substr(_index,2);
+
+        if (const auto it = _doubleSymbols.find(s); it != _doubleSymbols.cend()) {
+            tokens.push_back({.type = it->second, .value = {}, .location = location});
+            consume();
+            consume();
+            return true;
+        }
+    }
+        return false;
 }
 
 

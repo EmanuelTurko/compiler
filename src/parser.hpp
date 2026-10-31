@@ -19,91 +19,124 @@ namespace node {
     struct Stmt;
     struct IfPred;
 
-    namespace term {
-        struct IntLit {
+    namespace literal {
+        struct Int {
             Token token;
+        };
+
+        struct Bool {
+            Token token;
+        };
+
+        struct String {
+            Token token;
+        };
+    }
+
+    struct Literal {
+        variant<literal::Int, literal::Bool, literal::String> var;
+    };
+
+    namespace expr {
+        struct Unary {
+            Token op;
+            unique_ptr<Expr> expr;
+        };
+
+        struct Binary {
+            Token op;
+            unique_ptr<Expr> lhs;
+            unique_ptr<Expr> rhs;
         };
 
         struct Ident {
             Token token;
         };
 
-        struct Paren {
-            unique_ptr<Expr> expr;
+        struct Call {
+            expr::Ident funName;
+            std::vector<Expr> args;
         };
     }
-    struct Term {
-        variant<term::IntLit, term::Ident, term::Paren> var;
-    };
-    namespace expr {
-        struct Add {
-            unique_ptr<Expr> lhs;
-            unique_ptr<Expr> rhs;
-        };
 
-        struct Mul {
-            unique_ptr<Expr> lhs;
-            unique_ptr<Expr> rhs;
-        };
-
-        struct Div {
-            unique_ptr<Expr> lhs;
-            unique_ptr<Expr> rhs;
-        };
-
-        struct Sub {
-            unique_ptr<Expr> lhs;
-            unique_ptr<Expr> rhs;
-        };
-
-        struct Binary {
-            variant<Add, Mul, Div, Sub> var;
-        };
-    }
     struct Expr {
-        variant<Term, expr::Binary> var;
+        variant<Literal, expr::Ident, expr::Binary, expr::Unary, expr::Call> var;
     };
-    struct Scope {
+
+    struct Block {
         std::vector<Stmt> stmts;
     };
+
+    struct Type {
+        Token token;
+    };
+
     namespace pred {
         struct Elif {
             Expr cond;
-            Scope scope;
+            Block block;
             unique_ptr<IfPred> next;
         };
+
         struct Else {
-            Scope scope;
+            Block block;
         };
     }
+
     struct IfPred {
-        variant<pred::Elif,pred::Else> var;
+        variant<pred::Elif, pred::Else> var;
     };
+
     namespace stmt {
-        struct Exit {
-            Expr expr;
+        struct Ret {
+            std::optional<Expr> expr;
         };
 
-        struct Let {
-            Token token;
-            Expr expr;
+        struct Def {
+            std::optional<Type> type;
+            expr::Ident ident;
+            std::optional<Expr> expr;
         };
 
         struct If {
             Expr cond;
-            Scope scope;
+            Block block;
             unique_ptr<IfPred> next;
         };
-        struct Assignment {
-            Token token;
+
+        struct Assign {
+            expr::Ident ident;
+            Expr expr;
+        };
+
+        struct While {
+            Expr cond;
+            Block block;
+        };
+
+        struct ExprStmt {
             Expr expr;
         };
     }
+
     struct Stmt {
-        variant<stmt::Exit, stmt::Let, Scope, stmt::If,stmt::Assignment> var;
+        variant<stmt::Ret, stmt::Def, Block, stmt::If, stmt::Assign, stmt::While, stmt::ExprStmt> var;
     };
+
+    struct Param {
+        Type type;
+        expr::Ident ident;
+    };
+
+    struct Fun {
+        expr::Ident ident;
+        std::vector<Param> params; // params+ (int x,int y)
+        std::optional<Type> retType; // -> bool
+        Block block;
+    };
+
     struct Program {
-        std::vector<Stmt> stmts;
+        std::vector<Fun> functions;
     };
 }
 
@@ -118,9 +151,9 @@ public:
 private:
 
     auto tryParseStmt() -> optional<node::Stmt>;
-    auto parseScope() -> node::Scope;
-    auto parseStmtLet() -> node::stmt::Let;
-    auto parseStmtExit() -> node::stmt::Exit;
+    auto parseScope() -> node::Block;
+    auto parseStmtLet() -> node::stmt::Def;
+    auto parseStmtRet() -> node::stmt::Ret;
     auto parseStmtBranchIf() -> node::stmt::If;
     auto parseCondition() -> node::Expr;
     auto parseAssignment() -> node::stmt::Assignment;

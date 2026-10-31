@@ -1,0 +1,26 @@
+Program  ::= Function*
+Function ::= 'fun' IDENTIFIER '(' Params? ')' ( '->' Type )? Block
+Params   ::= Param ( ',' Param )*
+Param    ::= Type IDENTIFIER
+Type     ::= 'int' | 'bool'
+Block    ::= '{' Statement* '}'
+Statement  ::= Block | If | While | Return | Def | Assignment | ExprStmt
+If         ::= 'if' '(' Expr ')' Block ( 'elif' '(' Expr ')' Block )* ( 'else' Block )?
+While      ::= 'while' '(' Expr ')' Block
+Return     ::= 'ret' Expr? ';'
+Def        ::= 'def' ( Type IDENTIFIER ( '=' Expr )? | IDENTIFIER '=' Expr ) ';'
+Assignment ::= IDENTIFIER '=' Expr ';'
+ExprStmt   ::= Expr ';'
+Expr           ::= Assign
+Assign         ::= Ternary ( '=' Assign )?
+Ternary        ::= LogicOr ( '?' Expr ':' Ternary )?
+LogicOr        ::= LogicAnd ( '||' LogicAnd )*
+LogicAnd       ::= Equality ( '&&' Equality )*
+Equality       ::= Comparison ( ( '==' | '!=' ) Comparison )*
+Comparison     ::= Additive ( ( '<' | '>' | '<=' | '>=' ) Additive )*
+Additive       ::= Multiplicative ( ( '+' | '-' ) Multiplicative )*
+Multiplicative ::= Unary ( ( '*' | '/' | '%' ) Unary )*
+Unary          ::= ( '-' | '!' | '++' | '--' | '*' | '&' ) Unary | Postfix
+Postfix        ::= Primary ( '(' Args? ')' | '[' Expr ']' | '++' | '--' )*
+Args           ::= Expr ( ',' Expr )*
+Primary        ::= INT_LIT | STR_LIT | 'true' | 'false' | IDENTIFIER | '(' Expr ')'
