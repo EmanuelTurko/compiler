@@ -7,32 +7,43 @@
 
 /** Turns the raw source text into a flat list of tokens. One pass, left to right, never goes back.
  *
- *  1. While there are characters left, peek at the current one (don't consume yet) and decide by its first char:
- *  1.1 Letter -> tokenizeWord(): consume letters/digits into a buffer while they keep coming.
- *      If the buffer is a keyword (exit, let, if) -> keyword token, no value.
- *      Otherwise -> ident token, the buffer is its value (the variable name).
- *  1.2 Digit  -> tokenizeNum(): consume digits into a buffer. -> intLit token, the digits are its value (kept as text).
- *  1.3 Anything else -> tokenizeSymbol(): one char, one token ( ( ) { } ; = + - * / ).
- *      Whitespace (' ', \n, \t, \r) is consumed but produces no token.
- *      Unknown char -> error and exit.
- *  2. The helpers stop on the first char that doesn't belong to them, without consuming it,
- *     so the next loop iteration starts exactly on it ("x=5" works without spaces).
- *  3. Reset _index to 0 and return the tokens.
+ *  A Token is {type, value, location}:
+ *    type     - what it is (TokenType: let, ident, intLit, plus, semi, ...)
+ *    value    - only for ident (the name) and intLit (the digits, kept as text), empty otherwise
+ *    location - line:col of the token's FIRST char, used by every error message (see error.hpp)
+ *  _location tracks the current line:col; consume() is the only place that moves it.
  *
- *  Example: let x = (10 - 2);
- *  'l' letter -> word: "let"  -> keyword        [let]
+ *  1. While there are characters left, save where we are (startingLocation), peek at the current char
+ *     (don't consume yet) and decide by it:
+ *  1.1 Letter -> tokenizeWord(): consume letters/digits into a buffer while they keep coming.
+ *      If the buffer is a keyword (exit, let, if, elif, else) -> keyword token, no value.
+ *      Otherwise -> ident token, the buffer is its value (the variable name).
+ *  1.2 Digit  -> tokenizeNum(): consume digits into a buffer -> intLit token, the digits are its value.
+ *      Numbers that don't fit in a signed 64-bit int are rejected here.
+ *  1.3 '//' or '/' '*' -> skipComment(): consume up to the end of the line / the closing '*' '/'. No token.
+ *      An unclosed block comment is an error.
+ *  1.4 Anything else -> tokenizeSymbol(): whitespace is consumed with no token;
+ *      a known symbol ( ( ) { } ; = + - * / ) becomes one token (via the _symbols table); anything else is an error.
+ *  2. The token gets startingLocation, so errors point at its first char, not at where reading stopped.
+ *  3. The helpers stop on the first char that doesn't belong to them, without consuming it,
+ *     so the next loop iteration starts exactly on it ("x=5" works without spaces).
+ *  4. Reset _index and _location and return the tokens.
+ *
+ *  Example: let x = (10 - 2); // ten minus two
+ *  'l' letter -> word: "let"  -> keyword        [let]                 1:1
  *  ' ' space  -> skipped
- *  'x' letter -> word: "x"    -> not a keyword  [ident "x"]
- *  ' ' skipped, '=' symbol                      [eq]
- *  ' ' skipped, '(' symbol                      [openParen]
- *  '1' digit  -> num: "10", stops at ' '        [intLit "10"]
- *  ' ' skipped, '-' symbol, ' ' skipped         [minus]
- *  '2' digit  -> num: "2", stops at ')'         [intLit "2"]
- *  ')' symbol                                   [closeParen]
- *  ';' symbol                                   [semi]
+ *  'x' letter -> word: "x"    -> not a keyword  [ident "x"]           1:5
+ *  ' ' skipped, '=' symbol                      [eq]                  1:7
+ *  ' ' skipped, '(' symbol                      [openParen]           1:9
+ *  '1' digit  -> num: "10", stops at ' '        [intLit "10"]         1:10
+ *  ' ' skipped, '-' symbol, ' ' skipped         [sub]                 1:13
+ *  '2' digit  -> num: "2", stops at ')'         [intLit "2"]          1:15
+ *  ')' symbol                                   [closeParen]          1:16
+ *  ';' symbol                                   [semi]                1:17
+ *  ' ' skipped, '//' comment -> skipped to end of line
  *  end of source -> loop ends.
  *
- *  Result: [let] [ident "x"] [eq] [openParen] [intLit "10"] [minus] [intLit "2"] [closeParen] [semi]
+ *  Result: [let] [ident "x"] [eq] [openParen] [intLit "10"] [sub] [intLit "2"] [closeParen] [semi]
  *
  *  Note: words may contain digits after the first letter ("x2" is one ident),
  *        but a word can't start with a digit: "2x" becomes [intLit "2"] [ident "x"].

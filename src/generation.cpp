@@ -2,6 +2,51 @@
 
 #include "error.hpp"
 
+/** Walks the AST and writes x86-64 assembly (nasm syntax) into _output. One pass, top to bottom, no optimisation.
+ *  main.cpp writes the result to out.asm, then nasm + ld turn it into the executable `out`.
+ *  (Instructions used are explained in generation.hpp.)
+ *
+ *  The model: everything lives on the stack.
+ *  1. Every expression leaves exactly ONE value on top of the stack (push). Whoever needs the value pops it.
+ *     push()/pop() also keep _stackSize (counted in 8-byte slots, not bytes) in sync with the real stack.
+ *  2. A variable IS a stack slot. `let` evaluates its expression and leaves the result where it is;
+ *     that slot becomes the variable. _vars remembers {name, stackLocation}, where stackLocation is the
+ *     slot number counted from the bottom (first push = slot 0). The variable is registered only AFTER its
+ *     expression is generated, so `let x = x;` is "Variable not found".
+ *  3. To find a variable, convert "slot from the bottom" into "bytes from the top" (rsp points at the top):
+ *         offset = (_stackSize - stackLocation - 1) * 8      ->  [rsp + offset]
+ *     Reading pushes a copy of that slot; assignment evaluates the new value, pops it into rax, and writes it there.
+ *  4. Binary ops: generate rhs, then lhs (so lhs ends on top), pop rax = lhs, pop rbx = rhs,
+ *     operate into rax, push rax. Math is signed (imul, cqo + idiv).
+ *  5. Scopes: beginScope() remembers how many vars exist; endScope() frees everything declared since
+ *     (add rsp, count * 8), forgets those names, and lowers _stackSize by count.
+ *  6. if / elif / else: each condition is evaluated and popped into rax; `test rax, rax` + `jz` skips the body
+ *     when it's 0 (0 = false, anything else = true).
+ *     Each link has its own "false" label, placed right after its body = the start of the next link.
+ *     The whole chain shares one end label, placed after the last link; every taken body jumps there.
+ *  7. exit(expr): evaluate, pop into rdi, syscall 60. The program always ends with an implicit exit(0).
+ *
+ *  Example: let x = 7; let y = x - 2; exit(y);
+ *
+ *  code                          asm                             stack (top on the right)   _stackSize
+ *  let x = 7;                    mov rax, 7 / push rax           [x=7]                       1   x -> slot 0
+ *  let y = x - 2;  rhs 2         mov rax, 2 / push rax           [7, 2]                      2
+ *                  lhs x         push QWORD [rsp + 8]            [7, 2, 7]                   3   (3-0-1)*8 = 8
+ *                  op            pop rax / pop rbx               [7]                         1
+ *                                sub rax, rbx / push rax         [7, y=5]                    2   y -> slot 1
+ *  exit(y);                      push QWORD [rsp + 0]            [7, 5, 5]                   3   (3-1-1)*8 = 0
+ *                                mov rax, 60 / pop rdi / syscall                                 exit code 5
+ *
+ *  Example: if(c){ A } elif(d){ B } else { C }
+ *          <c>  pop rax / test rax, rax / jz label0   ; c false -> try the elif
+ *          A                                         ; if body
+ *          jmp label1                                ; taken -> skip the rest of the chain
+ *  label0: <d>  pop rax / test rax, rax / jz label2   ; d false -> go to the else
+ *          B
+ *          jmp label1
+ *  label2: C                                         ; last link: falls into label1 by itself
+ *  label1:                                           ; end of the whole chain
+ */
 auto Generator::generateProgram() -> std::string {
     _output << "global _start\n_start:\n";
 
@@ -18,12 +63,10 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
         Generator& gen;
 
         auto operator()(const node::stmt::Exit &exit) const -> void {
-            gen._output << ";; exit\n";
             gen.generateExpr(exit.expr);
             gen._output << "    mov rax,60\n";
             gen.pop("rdi");
             gen._output << "    syscall\n\n";
-            gen._output << ";; /exit\n";
         }
 
         auto operator()(const node::stmt::Let &let) const -> void {
@@ -36,14 +79,10 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             }
             gen.generateExpr(let.expr);
             gen._vars.push_back({.name = let.token.value.value(), .stackLocation = gen._stackSize-1});
-            gen._output << ";; let\n";
-            gen._output << ";; /let\n";
         }
 
         auto operator()(const node::Scope &scope) const -> void {
-            gen._output << ";; scope\n";
             gen.generateScope(scope);
-            gen._output << ";; /scope\n";
         }
         auto operator()(const node::stmt::Assignment &assignment) const -> void {
             const auto it = std::ranges::find_if(
@@ -54,16 +93,13 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
                 error("Variable not found",assignment.token.location);
             }
 
-            gen._output << ";; assignment\n";
             gen.generateExpr(assignment.expr);
             gen.pop("rax");
             gen._output << "    mov [rsp + " << (gen._stackSize - it->stackLocation-1)*8<< "],rax\n";
-            gen._output << ";; /assignment\n";
 
         }
 
         auto operator()(const node::stmt::If &if_) const -> void {
-            gen._output << ";; if\n";
             gen.generateExpr(if_.cond);
             gen.pop("rax");
 
@@ -77,7 +113,6 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             if (if_.next)
                 gen.generateIfPred(*if_.next, endLabel);
             gen._output << endLabel << ":\n";
-            gen._output << ";; /if\n";
         }
     };
 
@@ -91,7 +126,6 @@ auto Generator::generateIfPred(const node::IfPred &ifPred, std::string& endLabel
         std::string& endLabel;
         auto operator()(const node::pred::Elif &elif_) const -> void {
 
-            gen._output << ";; elif\n";
             gen.generateExpr(elif_.cond);
             gen.pop("rax");
 
@@ -102,12 +136,9 @@ auto Generator::generateIfPred(const node::IfPred &ifPred, std::string& endLabel
             gen._output << "    jmp " << endLabel << "\n";
             gen._output << label << ":\n";
             if (elif_.next) gen.generateIfPred(*elif_.next,endLabel);
-            gen._output << ";; /elif\n";
         }
         auto operator()(const node::pred::Else &else_) const -> void {
-            gen._output << ";; else\n";
             gen.generateScope(else_.scope);
-            gen._output << ";; /else\n";
         }
     };
 
@@ -119,10 +150,8 @@ auto Generator::generateTerm(const node::Term &term) -> void {
         Generator& gen;
 
         auto operator()(const node::term::IntLit &intLit) const -> void {
-            gen._output << ";; intLit\n";
             gen._output << "    mov rax, " << intLit.token.value.value() << "\n";
             gen.push("rax");
-            gen._output << ";; /intLit\n";
         }
 
         auto operator()(const node::term::Ident &ident) const -> void {
@@ -133,17 +162,13 @@ auto Generator::generateTerm(const node::Term &term) -> void {
             if (it == gen._vars.cend()) {
                 error("Variable not found",ident.token.location);
             }
-            gen._output << ";; ident\n";
             std::stringstream offset;
             offset << "QWORD [rsp + " << (gen._stackSize - it->stackLocation - 1) * 8 << "]";
             gen.push(offset.str());
-            gen._output << ";; /ident\n";
         }
 
         auto operator()(const node::term::Paren &paren) const -> void {
-            gen._output << ";; paren\n";
             gen.generateExpr(*paren.expr);
-            gen._output << ";; /paren\n";
         }
     };
     TermVisitor visitor{.gen = *this};

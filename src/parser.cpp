@@ -5,9 +5,47 @@
 using Expr = node::Expr;
 using Stmt = node::Stmt;
 
-
-
-
+/** Parser: turns the flat token list into a tree (the AST) that the generator walks.
+ *  Recursive descent: one function per grammar rule (docs/grammer.md), each one consumes exactly the tokens of its rule.
+ *
+ *  Naming convention:
+ *    tryParseX()  - "maybe there's an X here": returns nullopt/nullptr WITHOUT error if X doesn't start here.
+ *    parseX()     - "there MUST be an X here": errors and exits if it isn't.
+ *    tryConsume(type)        - consume the token if it has that type, otherwise nullopt.
+ *    tryConsume(type, msg)   - consume the token if it has that type, otherwise error(msg).
+ *  Errors use getLocation(): the current token's line:col, or the last token's at end of file.
+ *
+ *  Grammar rule        -> function             -> node
+ *    Prog              -> parseProgram         -> node::Program   { vector<Stmt> }
+ *    Stmt              -> tryParseStmt         -> node::Stmt      variant<Exit, Let, Scope, If, Assignment>
+ *      exit(Expr);     -> parseStmtExit        -> stmt::Exit
+ *      let ident=Expr; -> parseStmtLet         -> stmt::Let
+ *      ident = Expr;   -> parseAssignment      -> stmt::Assignment
+ *      if(Expr) Scope  -> parseStmtBranchIf    -> stmt::If        { cond, scope, next }
+ *      { Stmt* }       -> parseScope           -> node::Scope     { vector<Stmt> }
+ *    IfPred            -> tryParseIfPred       -> node::IfPred    variant<Elif, Else>, or nullptr if neither follows
+ *    Expr              -> parseExpr / tryParseExpr (precedence climbing, see below)
+ *                                              -> node::Expr      variant<Term, Binary>
+ *    Term              -> tryParseTerm         -> node::Term      variant<IntLit, Ident, Paren>
+ *
+ *  Which statement is it? tryParseStmt looks at ONE token (LL(1)): let / exit / { / ident / if.
+ *
+ *  The if chain is a linked list: If.next -> Elif.next -> Elif.next -> Else (Else has no next).
+ *  Children are held by unique_ptr where a node contains its own type (Expr inside Expr, IfPred inside IfPred),
+ *  because a struct can't hold itself by value.
+ *
+ *  Example: let x = 1 + 2; if(x){ exit(x); } else { exit(0); }
+ *  Program
+ *  |- Let  x
+ *  |  `- Binary Add
+ *  |     |- Term IntLit 1
+ *  |     `- Term IntLit 2
+ *  `- If
+ *     |- cond:  Term Ident x
+ *     |- scope: { Exit(Term Ident x) }
+ *     `- next:  Else
+ *               `- scope: { Exit(Term IntLit 0) }
+ */
 auto Parser::parseProgram() -> optional<node::Program> {
     node::Program program;
     while (peek().has_value()) {
@@ -107,9 +145,9 @@ auto Parser::parseExpr() -> Expr {
  *  3.2 Consume the operator (to step over it) and remember its type.
  *  3.3 Parse the right-hand side (rhs) with a recursive call, passing the consumed operator's precedence + 1.
  *      The +1 means the rhs only takes operators that bind tighter, so equal operators chain left-to-right.
- *  3.4 If there is no rhs, it's an error ("Expected expression").
+ *  3.4 If there is no rhs, it's an error ("Unable to parse expression").
  *  3.5 With lhs, rhs and op-type we construct the binary expression bottom-up (inside out):
- *      the op node (e.g. BinExprAdd) holds pointers to lhs and rhs, BinExpr holds the op node, Expr holds BinExpr.
+ *      the op node (e.g. expr::Add) holds pointers to lhs and rhs, expr::Binary holds the op node, Expr holds Binary.
  *  3.6 The constructed Expr replaces lhs, and the loop runs again.
  *  4. Return lhs.
  *

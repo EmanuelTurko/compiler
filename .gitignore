@@ -8,3 +8,4 @@ out.asm
 *.o
 # CLion
 .idea/
+Testing/*
