@@ -54,7 +54,6 @@ auto Parser::parseProgram() -> node::Program {
     }
     return program;
 }
-
 auto Parser::parseFun() -> node::Fun { // fun myfun(int x,int y) -> bool { }
     tryConsume(TokenType::kwFun, "expected function keyword");
     const auto funName = tryConsume(TokenType::ident,"Expected identifier");
@@ -69,7 +68,7 @@ auto Parser::parseFun() -> node::Fun { // fun myfun(int x,int y) -> bool { }
         consume();
         type = parseType();
     }
-    auto block = parseScope();
+    auto block = parseBlock();
     return node::Fun{
         .funName = node::expr::Ident{funName},
         .params = std::move(params),
@@ -77,7 +76,6 @@ auto Parser::parseFun() -> node::Fun { // fun myfun(int x,int y) -> bool { }
         .block =std::move(block)
     };
 }
-
 auto Parser::parseParams() -> std::vector<node::Param> {
     // params are built on (Type identifier,Type identifier,..) (int x,int y)
     if (peekIs(TokenType::closeParen))
@@ -98,71 +96,108 @@ auto Parser::parseParams() -> std::vector<node::Param> {
     }
     return params;
 }
-
 auto Parser::parseType() -> node::Type {
-    if (peek().has_value() && (peek().value().type == TokenType::kwBool || peek().value().type == TokenType::kwInt)) {
-        const auto token = consume();
-        if (token.type == TokenType::kwBool ||
-            token.type == TokenType::kwInt)
-            return node::Type{.token = token};
-    }
+    if (isTypeKeyword())
+        return node::Type{.token = consume()};
     error("Expected a type",getLocation());
 }
-
+auto Parser::isTypeKeyword() const -> bool {
+   return peekIs(TokenType::kwBool) || peekIs(TokenType::kwInt) || peekIs(TokenType::kwString);
+}
 auto Parser::tryParseStmt() -> optional<Stmt> {
-    if (!peek().has_value()) return nullopt;
+    if (!peek().has_value())
+        return nullopt;
 
-    switch (peek().value().type) {
-        case TokenType::kwDef:
-            return Stmt{.var = parseStmtLet()};
-        case TokenType::kwRet:
-            return Stmt{.var = parseStmtRet()};
-        case TokenType::openCurly:
-            return Stmt{.var = parseScope()};
-        case TokenType::ident:
-            return Stmt{.var = parseAssignment()};
-        case TokenType::kwIf:
-            return Stmt{.var = parseStmtBranchIf()};
-        default:
-            return nullopt;
+    if (peekIs(TokenType::openCurly))
+        return Stmt{.var = parseBlock()};
+    if (peekIs(TokenType::kwIf))
+        return Stmt{.var = parseIf()};
+    if (peekIs(TokenType::kwWhile))
+        return Stmt{.var = parseWhile()};
+    if (peekIs(TokenType::kwRet))
+        return Stmt{.var = parseRet()};
+    if (peekIs(TokenType::kwDef))
+        return Stmt{.var = parseDef()};
+    if (peekIs(TokenType::ident) && peekIs(TokenType::assign,1))
+        return Stmt{.var = parseAssign()};
+    if (peekIs(TokenType::ident) && peekIs(TokenType::openParen,1))
+        return Stmt{.var = parseExprStmt()};
+
+    return nullopt;
+}
+auto Parser::parseBlock() -> node::Block {
+    node::Block block{};
+
+    tryConsume(TokenType::openCurly,"Expected '{'");
+    while (true) // recursion to parse the entire scoped stmt { | def x = 5; | }
+    {
+        if (peekIs(TokenType::closeCurly)) break;
+        if (auto stmt = tryParseStmt();
+            stmt.has_value()) block.stmts.push_back(std::move(stmt.value()));
+        else error("Expected a statement",getLocation());
     }
+    tryConsume(TokenType::closeCurly, "expected '}'");
+    return block;
 }
-auto Parser::parseScope() -> node::Block {
-    // Statement: { let x = 5; }
-    consume(); // |{| let x = 5; }
-    node::Block scope{}; //
-    while (auto stmt = tryParseStmt()) // recursion to parse the entire scoped stmt { | let x = 5; | }
-        scope.stmts.push_back(std::move(stmt.value())); //
-    tryConsume(TokenType::closeCurly, "expected '}'"); // { let x = 5; |}|
-    return scope;
-}
-auto Parser::parseStmtLet() -> node::stmt::Def {
-    consume();
-    auto token = tryConsume(TokenType::ident, "expected identifier");
-    tryConsume(TokenType::assign, "expected '=' after identifier");
-    auto expr = parseExpr();
+auto Parser::parseDef() -> node::stmt::Def {
+    // def int x = 5;
+    // def x = y;
+    // def int x;
+    // def x; <-- not valid
+    std::optional<node::Type> type{};
+    std::optional<Expr> expr{};
+
+    tryConsume(TokenType::kwDef,"expected keyword");
+    if (isTypeKeyword()) type = parseType();
+    const auto ident = tryConsume(TokenType::ident, "expected identifier");
+    if (peekIs(TokenType::assign)) {
+        consume();
+        expr = parseExpr();
+    }
+    if (!type.has_value() && !expr.has_value()) error("def needs a type or a value”",ident.location);
     tryConsume(TokenType::semi, "expected ';'");
-    return node::stmt::Def{.token = std::move(token), .expr = std::move(expr)};
+
+    return node::stmt::Def{
+        .type = type,
+        .ident = node::expr::Ident{.token = ident},
+        .expr = std::move(expr)
+    };
 }
-auto Parser::parseStmtRet() -> node::stmt::Ret {
-    // Statement: exit(x);
-    consume(); // |exit|(x);
-    auto expr = parseExpr(); // exit(|x|);
-    tryConsume(TokenType::semi, "expected ';'"); //exit(x)|;|
+auto Parser::parseRet() -> node::stmt::Ret {
+    // ret x; <-- type
+    // ret true; <-- keyword
+    // ret; <-- void
+    std::optional<Expr> expr{};
+
+    tryConsume(TokenType::kwRet, "expected ret");
+    if (!peekIs(TokenType::semi)) expr = parseExpr();
+    tryConsume(TokenType::semi, "expected ';'");
     return node::stmt::Ret{.expr = std::move(expr)};
 }
-auto Parser::parseStmtBranchIf() -> node::stmt::If {
+auto Parser::parseIf() -> node::stmt::If {
     // if(x > 5) { do stuff; }
-    consume();
+    tryConsume(TokenType::kwIf, "expected 'if'");
     auto cond = parseCondition();
-    auto scope = parseScope();
+
+    auto block = parseBlock();
     auto next = tryParseIfPred();
     return node::stmt::If{
         .cond = std::move(cond),
-        .block = std::move(scope),
+        .block = std::move(block),
         .next = std::move(next)
     };
 }
+
+auto Parser::parseWhile() -> node::stmt::While {
+    tryConsume(TokenType::kwWhile, "expected 'while'");
+    auto cond = parseCondition();
+    auto block = parseBlock();
+    return node::stmt::While{
+        .cond = std::move(cond),
+        .block = std::move(block)
+    };
+}
+
 auto Parser::parseCondition() -> node::Expr {
     tryConsume(TokenType::openParen, "Expected '('");
     auto cond = parseExpr();
@@ -171,12 +206,38 @@ auto Parser::parseCondition() -> node::Expr {
     return cond;
 }
 
-auto Parser::parseAssignment() -> node::stmt::Assignment {
-    const auto token = consume(); // get the target
+auto Parser::parseAssign() -> node::stmt::Assign {
+    // x = 5;
+    // x = y;
+    const auto token = tryConsume(TokenType::ident,"expected identifier");
     tryConsume(TokenType::assign, "Expected '='");
     auto expr = parseExpr();
     tryConsume(TokenType::semi, "Expected ';'");
-    return {.token = token,.expr = std::move(expr)};
+    return {
+        .ident = node::expr::Ident{.token = token},
+        .expr = std::move(expr)
+    };
+}
+
+auto Parser::parseExprStmt() -> node::stmt::ExprStmt {
+    std::vector<Expr> args{};
+    const auto token = tryConsume(TokenType::ident, "expected function name");
+    tryConsume(TokenType::openParen, "expected '('");
+    if (!peekIs(TokenType::closeParen)) {
+        while (true) {
+            args.push_back(parseExpr());
+            if (peekIs(TokenType::closeParen)) break;
+            if (peekIs(TokenType::comma)) consume();
+            else error("expected ',' or ')'", getLocation());
+        }
+    }
+    tryConsume(TokenType::closeParen, "expected ')'");
+    return node::stmt::ExprStmt{
+        node::expr::Call{
+            .funName = node::expr::Ident{.token = token},
+            .args = std::move(args)
+        }
+    };
 }
 
 auto Parser::parseExpr() -> Expr {
@@ -287,13 +348,13 @@ auto Parser::tryParseTerm() -> optional<node::Term> {
 auto Parser::tryParseIfPred() -> unique_ptr<node::IfPred> {
     if (tryConsume(TokenType::kwElif)) {
         auto cond = parseCondition();
-        auto scope = parseScope();
+        auto block = parseBlock();
 
         return make_unique<node::IfPred>(
             node::IfPred{
                 .var = node::pred::Elif{
                     .cond = std::move(cond),
-                    .scope = std::move(scope),
+                    .block = std::move(block),
                     .next = tryParseIfPred()
                 }
             });
@@ -302,7 +363,7 @@ auto Parser::tryParseIfPred() -> unique_ptr<node::IfPred> {
         return make_unique<node::IfPred>(
             node::IfPred{
                 .var = node::pred::Else{
-                    .scope = parseScope()
+                    .block = parseBlock()
                 }
             });
     }

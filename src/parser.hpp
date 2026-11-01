@@ -54,7 +54,7 @@ namespace node {
         };
 
         struct Call {
-            expr::Ident funName;
+            Ident funName;
             std::vector<Expr> args;
         };
     }
@@ -89,7 +89,7 @@ namespace node {
 
     namespace stmt {
         struct Ret {
-            std::optional<Type> type;
+            std::optional<Expr> expr;
         };
 
         struct Def {
@@ -115,12 +115,12 @@ namespace node {
         };
 
         struct ExprStmt {
-            Expr expr;
+            expr::Call call;
         };
     }
 
     struct Stmt {
-        variant<stmt::Ret, stmt::Def, Block, stmt::If, stmt::Assign, stmt::While, stmt::ExprStmt> var;
+        variant<stmt::Ret, stmt::Def, Block, stmt::If, stmt::Assign, stmt::While,stmt::ExprStmt > var;
     };
 
     struct Param {
@@ -149,16 +149,25 @@ public:
     auto parseProgram() -> node::Program;
 
 private:
+    // Fun methods
     auto parseFun() -> node::Fun;
     auto parseParams() -> std::vector<node::Param>;
     auto parseType() -> node::Type;
+
     auto tryParseStmt() -> optional<node::Stmt>;
-    auto parseScope() -> node::Block;
-    auto parseStmtLet() -> node::stmt::Def;
-    auto parseStmtRet() -> node::stmt::Ret;
-    auto parseStmtBranchIf() -> node::stmt::If;
+    auto parseBlock() -> node::Block;
+    auto parseIf() -> node::stmt::If;
+    auto parseWhile() -> node::stmt::While;
+    auto parseRet() -> node::stmt::Ret;
+    auto parseDef() -> node::stmt::Def;
+    auto parseAssign() -> node::stmt::Assign;
+    auto parseExprStmt() -> node::stmt::ExprStmt;
+
     auto parseCondition() -> node::Expr;
-    auto parseAssignment() -> node::stmt::Assign;
+
+
+
+
     auto parseExpr() -> node::Expr;
     auto tryParseExpr(int minPrecedence = 0) -> optional<node::Expr>;
     auto tryParseTerm() -> optional<node::Term>;
@@ -172,6 +181,7 @@ private:
     [[nodiscard]] auto peek(size_t offset = 0) const -> optional<Token>;
     [[nodiscard]] auto peekIs(const TokenType &type, size_t offset = 0) const -> bool;
     [[nodiscard]] auto getLocation() const -> Location;
+    [[nodiscard]] auto isTypeKeyword() const -> bool;
     template<typename T>
     [[nodiscard]] auto constructExpr(node::Expr lhs,node::Expr rhs) -> node::Expr;
 
