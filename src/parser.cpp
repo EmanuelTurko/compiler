@@ -46,17 +46,69 @@ using Stmt = node::Stmt;
  *     `- next:  Else
  *               `- scope: { Exit(Term IntLit 0) }
  */
-auto Parser::parseProgram() -> optional<node::Program> {
+auto Parser::parseProgram() -> node::Program {
     node::Program program;
     while (peek().has_value()) {
-        if (auto stmt = tryParseStmt()) {
-            program.stmts.push_back(std::move(stmt.value()));
-        } else {
-            error("Invalid statement",getLocation());
-        }
+        auto fun = parseFun();
+        program.functions.push_back(std::move(fun));
     }
     return program;
 }
+
+auto Parser::parseFun() -> node::Fun { // fun myfun(int x,int y) -> bool { }
+    tryConsume(TokenType::kwFun, "expected function keyword");
+    const auto funName = tryConsume(TokenType::ident,"Expected identifier");
+
+    tryConsume(TokenType::openParen, "expected '('");
+    auto params = parseParams();
+    tryConsume(TokenType::closeParen, "expected ')'");
+
+    std::optional<node::Type> type{};
+    if (peekIs(TokenType::arrow)) {
+        // If the return value isn't void: fun(x) -> bool
+        consume();
+        type = parseType();
+    }
+    auto block = parseScope();
+    return node::Fun{
+        .funName = node::expr::Ident{funName},
+        .params = std::move(params),
+        .retType = type,
+        .block =std::move(block)
+    };
+}
+
+auto Parser::parseParams() -> std::vector<node::Param> {
+    // params are built on (Type identifier,Type identifier,..) (int x,int y)
+    if (peekIs(TokenType::closeParen))
+        return {};
+
+    std::vector<node::Param> params;
+    while (true) {
+        const auto type = parseType();
+        const auto ident = tryConsume(TokenType::ident,"expected identifier");
+        params.push_back({
+            .type = type,
+            .ident = node::expr::Ident{.token = ident}});
+
+        if (peekIs(TokenType::comma))
+            consume();
+        else if (peekIs(TokenType::closeParen)) break;
+        else error("Expected ',' or ')'", getLocation());
+    }
+    return params;
+}
+
+auto Parser::parseType() -> node::Type {
+    if (peek().has_value() && (peek().value().type == TokenType::kwBool || peek().value().type == TokenType::kwInt)) {
+        const auto token = consume();
+        if (token.type == TokenType::kwBool ||
+            token.type == TokenType::kwInt)
+            return node::Type{.token = token};
+    }
+    error("Expected a type",getLocation());
+}
+
 auto Parser::tryParseStmt() -> optional<Stmt> {
     if (!peek().has_value()) return nullopt;
 
@@ -261,6 +313,11 @@ auto Parser::peek(const size_t offset) const -> optional<Token> {
     if (_index + offset >= _tokens.size()) return std::nullopt;
     return _tokens[_index + offset];
 }
+
+auto Parser::peekIs(const TokenType& type,const size_t offset) const -> bool {
+    return peek(offset).has_value() && peek(offset).value().type == type;
+}
+
 auto Parser::tryConsume(const TokenType type) -> optional<Token> {
     if (peek().has_value() && peek().value().type == type)
         return consume();

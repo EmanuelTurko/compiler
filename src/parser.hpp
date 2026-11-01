@@ -89,7 +89,7 @@ namespace node {
 
     namespace stmt {
         struct Ret {
-            std::optional<Expr> expr;
+            std::optional<Type> type;
         };
 
         struct Def {
@@ -129,7 +129,7 @@ namespace node {
     };
 
     struct Fun {
-        expr::Ident ident;
+        expr::Ident funName;
         std::vector<Param> params; // params+ (int x,int y)
         std::optional<Type> retType; // -> bool
         Block block;
@@ -146,17 +146,19 @@ public:
     _tokens(std::move(tokens)),
     _index(index){}
 
-    auto parseProgram() -> optional<node::Program>;
+    auto parseProgram() -> node::Program;
 
 private:
-
+    auto parseFun() -> node::Fun;
+    auto parseParams() -> std::vector<node::Param>;
+    auto parseType() -> node::Type;
     auto tryParseStmt() -> optional<node::Stmt>;
     auto parseScope() -> node::Block;
     auto parseStmtLet() -> node::stmt::Def;
     auto parseStmtRet() -> node::stmt::Ret;
     auto parseStmtBranchIf() -> node::stmt::If;
     auto parseCondition() -> node::Expr;
-    auto parseAssignment() -> node::stmt::Assignment;
+    auto parseAssignment() -> node::stmt::Assign;
     auto parseExpr() -> node::Expr;
     auto tryParseExpr(int minPrecedence = 0) -> optional<node::Expr>;
     auto tryParseTerm() -> optional<node::Term>;
@@ -168,6 +170,7 @@ private:
 
 
     [[nodiscard]] auto peek(size_t offset = 0) const -> optional<Token>;
+    [[nodiscard]] auto peekIs(const TokenType &type, size_t offset = 0) const -> bool;
     [[nodiscard]] auto getLocation() const -> Location;
     template<typename T>
     [[nodiscard]] auto constructExpr(node::Expr lhs,node::Expr rhs) -> node::Expr;
