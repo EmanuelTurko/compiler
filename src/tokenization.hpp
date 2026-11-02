@@ -29,7 +29,7 @@ enum class TokenType {
     percent
 };
 
-inline auto binPrecedence(const TokenType &type) -> std::optional<int> {
+inline auto binPrecedence(const TokenType &type) -> int {
     switch (type) {
         case TokenType::assign:
             return 0;
@@ -53,7 +53,7 @@ inline auto binPrecedence(const TokenType &type) -> std::optional<int> {
         case TokenType::percent:
             return 6;
         default:
-            return std::nullopt;
+            return -1;
     }
 }
 

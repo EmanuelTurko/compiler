@@ -154,36 +154,36 @@ private:
     auto parseParams() -> std::vector<node::Param>;
     auto parseType() -> node::Type;
 
+    // Stmt methods
     auto tryParseStmt() -> optional<node::Stmt>;
     auto parseBlock() -> node::Block;
     auto parseIf() -> node::stmt::If;
+    auto tryParseIfPred() -> unique_ptr<node::IfPred>;
     auto parseWhile() -> node::stmt::While;
     auto parseRet() -> node::stmt::Ret;
     auto parseDef() -> node::stmt::Def;
     auto parseAssign() -> node::stmt::Assign;
     auto parseExprStmt() -> node::stmt::ExprStmt;
 
+    // Expr methods
     auto parseCondition() -> node::Expr;
-
-
-
-
     auto parseExpr() -> node::Expr;
     auto tryParseExpr(int minPrecedence = 0) -> optional<node::Expr>;
-    auto tryParseTerm() -> optional<node::Term>;
-    auto tryParseIfPred() -> unique_ptr<node::IfPred>;
+    auto parsePrimary() -> node::Expr;
+    auto parseCall() -> node::expr::Call;
 
+    // Token consume methods
     auto tryConsume(TokenType type) -> optional<Token>;
     auto tryConsume(TokenType type, const std::string &errMsg) -> Token;
     auto consume() -> Token;
-
 
     [[nodiscard]] auto peek(size_t offset = 0) const -> optional<Token>;
     [[nodiscard]] auto peekIs(const TokenType &type, size_t offset = 0) const -> bool;
     [[nodiscard]] auto getLocation() const -> Location;
     [[nodiscard]] auto isTypeKeyword() const -> bool;
+
     template<typename T>
-    [[nodiscard]] auto constructExpr(node::Expr lhs,node::Expr rhs) -> node::Expr;
+    [[nodiscard]] auto constructExpr(Token& op,node::Expr lhs,node::Expr rhs) -> node::Expr;
 
     const std::vector<Token> _tokens;
     size_t _index;

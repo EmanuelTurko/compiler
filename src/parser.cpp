@@ -1,5 +1,7 @@
 #include "parser.hpp"
 
+#include <algorithm>
+
 #include "error.hpp"
 
 using Expr = node::Expr;
@@ -154,7 +156,7 @@ auto Parser::parseDef() -> node::stmt::Def {
         consume();
         expr = parseExpr();
     }
-    if (!type.has_value() && !expr.has_value()) error("def needs a type or a value”",ident.location);
+    if (!type.has_value() && !expr.has_value()) error("def needs a type or a value",ident.location);
     tryConsume(TokenType::semi, "expected ';'");
 
     return node::stmt::Def{
@@ -220,24 +222,9 @@ auto Parser::parseAssign() -> node::stmt::Assign {
 }
 
 auto Parser::parseExprStmt() -> node::stmt::ExprStmt {
-    std::vector<Expr> args{};
-    const auto token = tryConsume(TokenType::ident, "expected function name");
-    tryConsume(TokenType::openParen, "expected '('");
-    if (!peekIs(TokenType::closeParen)) {
-        while (true) {
-            args.push_back(parseExpr());
-            if (peekIs(TokenType::closeParen)) break;
-            if (peekIs(TokenType::comma)) consume();
-            else error("expected ',' or ')'", getLocation());
-        }
-    }
-    tryConsume(TokenType::closeParen, "expected ')'");
-    return node::stmt::ExprStmt{
-        node::expr::Call{
-            .funName = node::expr::Ident{.token = token},
-            .args = std::move(args)
-        }
-    };
+    auto exprStmt = node::stmt::ExprStmt{.call = parseCall()};
+    tryConsume(TokenType::semi,"Expected ';'");
+    return exprStmt;
 }
 
 auto Parser::parseExpr() -> Expr {
@@ -290,59 +277,44 @@ auto Parser::parseExpr() -> Expr {
  * @return optional<Expr>
  */
 auto Parser::tryParseExpr(int minPrecedence) -> optional<Expr> {
-    auto term = tryParseTerm();
-    if (!term) return nullopt;
 
-    Expr lhs{.var = std::move(term.value())};
-
+    Expr lhs = parsePrimary();
     while (true) {
-        optional<Token> current = peek();
-        optional<int> precedence = current ? binPrecedence(current.value().type) : nullopt;
-        if (!precedence || *precedence < minPrecedence) break;
+        int precedence{-1}; // no op
+        if (peek().has_value()) precedence = binPrecedence(peek().value().type);
+        if (precedence < minPrecedence) break;
 
         const auto token = consume();
-        auto rhs = tryParseExpr(precedence.value() + 1);
-        if (!rhs.has_value()) {
+        auto rhs = tryParseExpr(precedence+1);
+        if (!rhs.has_value())
             error("Unable to parse expression",getLocation());
-        }
-        switch (token.type) {
-            case TokenType::plus: {
-                lhs = constructExpr<node::expr::Add>(std::move(lhs), std::move(rhs.value()));
-                break;
-            }
-            case TokenType::star: {
-                lhs = constructExpr<node::expr::Mul>(std::move(lhs), std::move(rhs.value()));
-                break;
-            }
-            case TokenType::minus: {
-                lhs = constructExpr<node::expr::Sub>(std::move(lhs), std::move(rhs.value()));
-                break;
-            }
-            case TokenType::slash: {
-                lhs = constructExpr<node::expr::Div>(std::move(lhs), std::move(rhs.value()));
-                break;
-            }
-            default:
-                break;
-        }
+        lhs.var = node::expr::Binary{
+            .op = token,
+            .lhs = make_unique<Expr>(std::move(lhs)),
+            .rhs = make_unique<Expr>(std::move(rhs.value()))
+        };
     }
     return lhs;
 }
-auto Parser::tryParseTerm() -> optional<node::Term> {
-    if (const auto &token = tryConsume(TokenType::litInt))
-        return node::Term{.var = node::term::IntLit{.token = token.value()}};
-    if (const auto &token = tryConsume(TokenType::ident))
-        return node::Term{.var = node::term::Ident{.token = token.value()}};
-    if (tryConsume(TokenType::openParen)) {
-        auto expr = tryParseExpr();
-        if (!expr.has_value()) {
-            error("Expected expression",getLocation());
+
+auto Parser::parseCall() -> node::expr::Call {
+    std::vector<Expr> args{};
+    const auto token = tryConsume(TokenType::ident, "expected function name");
+    tryConsume(TokenType::openParen, "expected '('");
+    if (!peekIs(TokenType::closeParen)) {
+        while (true) {
+            args.push_back(parseExpr());
+            if (peekIs(TokenType::closeParen)) break;
+            if (peekIs(TokenType::comma)) consume();
+            else error("expected ',' or ')'", getLocation());
         }
-        tryConsume(TokenType::closeParen, "Expected ')'");
-        auto parenExpr = node::term::Paren{.expr = make_unique<Expr>(std::move(expr.value()))};
-        return node::Term{.var = std::move(parenExpr)};
     }
-    return nullopt;
+    tryConsume(TokenType::closeParen, "expected ')'");
+    return
+        node::expr::Call{
+            .funName = node::expr::Ident{.token = token},
+            .args = std::move(args)
+        };
 }
 
 auto Parser::tryParseIfPred() -> unique_ptr<node::IfPred> {
@@ -400,14 +372,27 @@ auto Parser::getLocation() const -> Location {
     }
     return _tokens.empty()? Location{} : _tokens[_index-1].location;
 }
-template<typename T>
-auto Parser::constructExpr(Expr lhs, Expr rhs) -> Expr {
-    T t{
-        .lhs = make_unique<Expr>(std::move(lhs)),
-        .rhs = make_unique<Expr>(std::move(rhs))
-    };
-    node::expr::Binary bin{.var = std::move(t)};
-    return Expr{.var = std::move(bin)};
+
+auto Parser::parsePrimary() -> node::Expr {
+    Expr expr{};
+
+    if (peekIs(TokenType::litInt))
+        expr.var = node::Literal{.var = node::literal::Int{.token = consume()}};
+    else if (peekIs(TokenType::kwTrue) || peekIs(TokenType::kwFalse))
+        expr.var = node::Literal{.var = node::literal::Bool{.token = consume()}};
+    else if (peekIs(TokenType::ident) && peekIs(TokenType::openParen, 1))
+        expr.var = node::expr::Call{parseCall()};
+    else if (peekIs(TokenType::ident))
+        expr.var = node::expr::Ident{.token = consume()};
+    else if (peekIs(TokenType::minus) || peekIs(TokenType::logicalNot))
+        expr.var = node::expr::Unary{.op = consume(), .expr = make_unique<node::Expr>(parsePrimary())};
+    else if (peekIs(TokenType::openParen)) {
+        consume();
+        expr = parseExpr();
+        tryConsume(TokenType::closeParen, "expected ')'");
+    } else
+        error("Expected expression", getLocation());
+    return expr;
 }
 
 
