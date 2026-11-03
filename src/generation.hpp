@@ -83,6 +83,8 @@ private:
 
     auto generateIfPred(const node::IfPred &ifPred, std::string& endLabel) -> void;
 
+    auto generateLiteral(const node::Literal &literal) -> void;
+
     auto push(const std::string &reg) -> void;
 
     auto pop(const std::string &reg) -> void;
@@ -96,6 +98,8 @@ private:
     auto endBlock() -> void;
 
     auto makeLabel() -> std::string;
+
+    auto generateOp(const TokenType &type) -> std::string;
 
     struct Var {
         std::string name{};

@@ -1,8 +1,9 @@
 fun add(int a, int b) -> int {
-def x = a + b;
+def x = b / a;
 ret x;
 }
+
 fun main() -> int
 {
-ret add(2,3);
+ret add(5,40);
 }

@@ -98,6 +98,7 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
                 if (ret.expr.has_value()) gen.generateExpr(ret.expr.value());
                 else gen.mov("rax","0");
                 gen.pop("rax");
+                gen._output <<";; test\n";
                 gen.mov("rsp","rbp");
                 gen._output << "    pop rbp\n";
                 gen._output << "    ret\n";
@@ -185,6 +186,26 @@ auto Generator::generateIfPred(const node::IfPred &ifPred, std::string& endLabel
     PredVisitor visitor{.gen = *this, .endLabel = endLabel};
     std::visit(visitor, ifPred.var);
 }
+
+auto Generator::generateLiteral(const node::Literal &literal) -> void {
+    struct LiteralVisitor {
+        Generator& gen;
+
+        auto operator()(const node::literal::Bool& bool_) const -> void {
+
+        }
+        auto operator()(const node::literal::Int& int_) const  -> void {
+            gen.mov("rax",int_.token.value.value());
+        }
+        auto operator()(const node::literal::String& str) const -> void {
+
+        }
+    };
+
+    LiteralVisitor visitor{.gen = *this};
+    std::visit(visitor,literal.var);
+}
+
 /*
 auto Generator::generateTerm(const node::Term &term) -> void {
     struct TermVisitor {
@@ -220,7 +241,7 @@ auto Generator::generateExpr(const node::Expr &expr) -> void {
         Generator& gen;
 
         auto operator()(const node::Literal& literal) const -> void {
-            assert(false &&"literal not impleneted");
+            gen.generateLiteral(literal);
         }
         auto operator()(const node::expr::Unary& unary) const -> void {
             assert(false &&"unary not impleneted");
@@ -240,8 +261,13 @@ auto Generator::generateExpr(const node::Expr &expr) -> void {
             gen.push(ss.str());
         }
         auto operator()(const node::expr::Call& call) const -> void {
-            //
+            for (size_t i = 0; i < call.args.size();++i) {
+                gen.generateExpr(call.args[i]);
+                gen.mov(gen.paramRegisters[i],"rax");
+            }
 
+            gen._output << "    call " << call.funName.token.value.value() + "\n";
+            gen.push("rax");
         }
 
     };
@@ -252,9 +278,9 @@ auto Generator::generateBinExpr(const node::expr::Binary &bin) -> void {
 
      generateExpr(*bin.lhs);
     generateExpr(*bin.rhs);
-    pop("rax");
     pop("rbx");
-    _output << "    add rax, rbx\n";
+    pop("rax");
+    _output << generateOp(bin.op.type);
     push("rax");
 }
 auto Generator::generateBlock(const node::Block &block) -> void {
@@ -292,4 +318,32 @@ auto Generator::endBlock() -> void {
 }
 auto Generator::makeLabel() -> std::string {
     return "label" + std::to_string(_labelCount++);
+}
+
+auto Generator::generateOp(const TokenType& type) -> std::string {
+    switch (type) {
+        case TokenType::plus:
+        return "    add rax,rbx\n";
+        case TokenType::star:
+        return "    imul rax,rbx\n";
+        case TokenType::minus:
+        return "    sub rax,rbx\n";
+        case TokenType::slash:
+            _output << "    cqo\n";
+            return "    idiv rbx\n";
+        case TokenType::eq:
+        case TokenType::neq:
+        case TokenType::less:
+        case TokenType::greater:
+        case TokenType::greaterEq:
+        case TokenType::lessEq:
+        case TokenType::logicalAnd:
+        case TokenType::logicalOr:
+        case TokenType::logicalNot:
+        case TokenType::inc:
+        case TokenType::dec:
+        case TokenType::percent:
+        default:
+            return "";
+    }
 }
