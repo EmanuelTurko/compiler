@@ -97,7 +97,11 @@ private:
         {"def", TokenType::kwDef},
         {"if", TokenType::kwIf},
         {"elif", TokenType::kwElif},
-        {"else", TokenType::kwElse}
+        {"else", TokenType::kwElse},
+        {"fun", TokenType::kwFun},
+        {"int", TokenType::kwInt},
+        {"bool", TokenType::kwBool},
+        {"string", TokenType::kwString},
     };
     inline static const std::unordered_map<char, TokenType> _symbols= {
         {'(', TokenType::openParen},

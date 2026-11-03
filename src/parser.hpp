@@ -129,7 +129,7 @@ namespace node {
     };
 
     struct Fun {
-        expr::Ident funName;
+        expr::Ident name;
         std::vector<Param> params; // params+ (int x,int y)
         std::optional<Type> retType; // -> bool
         Block block;

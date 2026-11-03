@@ -1,5 +1,7 @@
 #include "generation.hpp"
 
+#include <cassert>
+
 #include "error.hpp"
 
 /** Walks the AST and writes x86-64 assembly (nasm syntax) into _output. One pass, top to bottom, no optimisation.
@@ -48,57 +50,89 @@
  *  label1:                                           ; end of the whole chain
  */
 auto Generator::generateProgram() -> std::string {
-    _output << "global _start\n_start:\n";
+    const auto it =
+        std::ranges::find_if(_program.functions,[](const node::Fun &fun) -> bool {
+            return fun.name.token.value.value() == "main";
+    });
+    if (it == _program.functions.cend()) throw std::runtime_error("main() function not found");
 
-    for (const auto &stmt: _program.stmts) {
-        generateStmt(stmt);
+    _output << "global _start\n\n";
+    _output << "_start:\n";
+    _output << "    call main\n";
+    mov("rdi","rax");
+    mov("rax","60");
+    _output << "    syscall\n\n";
+
+    for (const auto &fun: _program.functions) {
+        generateFun(fun);
     }
-    _output << "    mov rax,60\n";
-    _output << "    mov rdi,0\n";
-    _output << "    syscall\n";
     return _output.str();
 }
+
+auto Generator::generateFun(const node::Fun& fun) -> void {
+
+    _vars.clear(); _stackSize = 0;
+
+    _output << fun.name.token.value.value() << ":\n";
+    push("rbp");
+    mov("rbp","rsp");
+    for (size_t i = 0; i < fun.params.size();++i) {
+        push(paramRegisters[i]);
+        _vars.push_back(Var{
+            .name = fun.params[i].ident.token.value.value(),
+            .stackLocation = _stackSize-1
+        });
+    }
+    generateBlock(fun.block);
+    mov("rsp","rbp");
+    pop("rbp");
+    _output << "    ret\n\n";
+}
+
+
 auto Generator::generateStmt(const node::Stmt &stmt) -> void {
     struct StmtVisitor {
         Generator& gen;
 
-        auto operator()(const node::stmt::Ret &exit) const -> void {
-            gen.generateExpr(exit.expr);
-            gen._output << "    mov rax,60\n";
-            gen.pop("rdi");
-            gen._output << "    syscall\n\n";
-        }
+        auto operator()(const node::stmt::Ret &ret) const -> void {
+                if (ret.expr.has_value()) gen.generateExpr(ret.expr.value());
+                else gen.mov("rax","0");
+                gen.pop("rax");
+                gen.mov("rsp","rbp");
+                gen._output << "    pop rbp\n";
+                gen._output << "    ret\n";
+            }
 
-        auto operator()(const node::stmt::Def &let) const -> void {
+        auto operator()(const node::stmt::Def &def) const -> void {
+            const auto val = def.ident.token.value.value();
             const auto it = std::ranges::find_if(
                 std::as_const(gen._vars), [&](const Var &var) -> bool {
-                    return var.name == let.token.value.value();
+                    return var.name == val;
                 });
             if (it != gen._vars.cend()) {
-                error("Variable already exists",let.token.location);
+                error("Variable already exists",def.ident.token.location);
             }
-            gen.generateExpr(let.expr);
-            gen._vars.push_back({.name = let.token.value.value(), .stackLocation = gen._stackSize-1});
+            gen.generateExpr(def.expr.value());
+            gen._vars.push_back({.name = val, .stackLocation = gen._stackSize-1});
         }
 
         auto operator()(const node::Block &scope) const -> void {
-            gen.generateScope(scope);
+            gen.generateBlock(scope);
         }
-        auto operator()(const node::stmt::Assignment &assignment) const -> void {
+        auto operator()(const node::stmt::Assign &assign) const -> void {
             const auto it = std::ranges::find_if(
                 std::as_const(gen._vars), [&](const Var &var) -> bool {
-                    return var.name == assignment.token.value.value();
+                    return var.name == assign.ident.token.value.value();
                 });
             if (it == gen._vars.cend()) {
-                error("Variable not found",assignment.token.location);
+                error("Variable not found",assign.ident.token.location);
             }
 
-            gen.generateExpr(assignment.expr);
+            gen.generateExpr(assign.expr);
             gen.pop("rax");
             gen._output << "    mov [rsp + " << (gen._stackSize - it->stackLocation-1)*8<< "],rax\n";
 
         }
-
         auto operator()(const node::stmt::If &if_) const -> void {
             gen.generateExpr(if_.cond);
             gen.pop("rax");
@@ -107,12 +141,18 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             gen._output << "    test rax, rax\n";
             gen._output << "    jz " << label << "\n";
             auto endLabel = gen.makeLabel();
-            gen.generateScope(if_.block);
+            gen.generateBlock(if_.block);
             gen._output << "    jmp " << endLabel << "\n";
             gen._output << label << ":\n";
             if (if_.next)
                 gen.generateIfPred(*if_.next, endLabel);
             gen._output << endLabel << ":\n";
+        }
+        auto operator()(const node::stmt::While &while_) const ->void{
+            assert("while not impleneted");
+        }
+        auto operator()(const node::stmt::ExprStmt& exprStmt) const -> void {
+            assert("exprstmt not impleneted");
         }
     };
 
@@ -132,19 +172,20 @@ auto Generator::generateIfPred(const node::IfPred &ifPred, std::string& endLabel
             const auto label = gen.makeLabel();
             gen._output << "    test rax, rax\n";
             gen._output << "    jz " << label << "\n";
-            gen.generateScope(elif_.scope);
+            gen.generateBlock(elif_.block);
             gen._output << "    jmp " << endLabel << "\n";
             gen._output << label << ":\n";
             if (elif_.next) gen.generateIfPred(*elif_.next,endLabel);
         }
         auto operator()(const node::pred::Else &else_) const -> void {
-            gen.generateScope(else_.scope);
+            gen.generateBlock(else_.block);
         }
     };
 
     PredVisitor visitor{.gen = *this, .endLabel = endLabel};
     std::visit(visitor, ifPred.var);
 }
+/*
 auto Generator::generateTerm(const node::Term &term) -> void {
     struct TermVisitor {
         Generator& gen;
@@ -173,67 +214,54 @@ auto Generator::generateTerm(const node::Term &term) -> void {
     };
     TermVisitor visitor{.gen = *this};
     std::visit(visitor, term.var);
-}
+}*/
 auto Generator::generateExpr(const node::Expr &expr) -> void {
     struct ExprVisitor {
         Generator& gen;
 
-        auto operator()(const node::Term &term) const -> void {
-            gen.generateTerm(term);
+        auto operator()(const node::Literal& literal) const -> void {
+            assert(false &&"literal not impleneted");
+        }
+        auto operator()(const node::expr::Unary& unary) const -> void {
+            assert(false &&"unary not impleneted");
         }
         auto operator()(const node::expr::Binary &bin) const -> void {
             gen.generateBinExpr(bin);
         }
+        auto operator()(const node::expr::Ident& ident) const -> void {
+            const auto it = std::ranges::find_if(gen._vars,[&](const Var& var)-> bool {
+                return var.name == ident.token.value.value();
+            });
+            if (it == gen._vars.cend())
+                error("Identifier not found",ident.token.location);
+
+            std::stringstream ss{};
+            ss << "QWORD [rsp + " << (gen._stackSize - it->stackLocation-1)*8<< "]";
+            gen.push(ss.str());
+        }
+        auto operator()(const node::expr::Call& call) const -> void {
+            //
+
+        }
+
     };
     ExprVisitor visitor({.gen = *this});
     std::visit(visitor, expr.var);
 }
 auto Generator::generateBinExpr(const node::expr::Binary &bin) -> void {
-    struct BinExprVisitor {
-        Generator &gen;
 
-        auto operator()(const node::expr::Add &add) const -> void {
-            gen.generateExpr(*add.rhs);
-            gen.generateExpr(*add.lhs);
-            gen.pop("rax");
-            gen.pop("rbx");
-            gen._output << "    add rax, rbx\n";
-            gen.push("rax");
-        }
-        auto operator()(const node::expr::Sub &sub) const -> void {
-            gen.generateExpr(*sub.rhs);
-            gen.generateExpr(*sub.lhs);
-            gen.pop("rax");
-            gen.pop("rbx");
-            gen._output << "    sub rax, rbx\n";
-            gen.push("rax");
-        }
-        auto operator()(const node::expr::Mul &mul) const -> void {
-            gen.generateExpr(*mul.rhs);
-            gen.generateExpr(*mul.lhs);
-            gen.pop("rax");
-            gen.pop("rbx");
-            gen._output << "    imul rax,rbx\n";
-            gen.push("rax");
-        }
-        auto operator()(const node::expr::Div &div) const -> void {
-            gen.generateExpr(*div.rhs);
-            gen.generateExpr(*div.lhs);
-            gen.pop("rax");
-            gen.pop("rbx");
-            gen._output << "    cqo\n";
-            gen._output << "    idiv rbx\n";
-            gen.push("rax");
-        }
-    };
-    BinExprVisitor visitor{.gen = *this};
-    std::visit(visitor, bin.var);
+     generateExpr(*bin.lhs);
+    generateExpr(*bin.rhs);
+    pop("rax");
+    pop("rbx");
+    _output << "    add rax, rbx\n";
+    push("rax");
 }
-auto Generator::generateScope(const node::Block &scope) -> void {
-    beginScope();
-    for (const auto &stmt: scope.stmts)
+auto Generator::generateBlock(const node::Block &block) -> void {
+    beginBlock();
+    for (const auto &stmt: block.stmts)
         generateStmt(stmt);
-    endScope();
+    endBlock();
 }
 
 
@@ -245,18 +273,23 @@ auto Generator::pop(const std::string &reg) -> void {
     _output << "    pop " << reg << "\n";
     _stackSize--;
 }
-auto Generator::beginScope() -> void {
-    _scopes.push_back(_vars.size());
+
+
+
+auto Generator::mov(const std::string &reg1, const std::string &reg2) -> void {
+    _output << "    mov " << reg1 << "," << reg2 << "\n";
 }
-auto Generator::endScope() -> void {
-    const size_t popCount = _vars.size() - _scopes.back();
-    _output << "    add rsp, " << popCount*8 << "\n";
+
+auto Generator::beginBlock() -> void {
+    _blocks.push_back(_vars.size());
+}
+auto Generator::endBlock() -> void {
+    const size_t popCount = _vars.size() - _blocks.back();
+    _output << "\n    add rsp, " << popCount*8 << "\n";
     _stackSize -= popCount;
     for (size_t i{}; i < popCount; i++) _vars.pop_back();
-    _scopes.pop_back();
+    _blocks.pop_back();
 }
 auto Generator::makeLabel() -> std::string {
     return "label" + std::to_string(_labelCount++);
 }
-
-

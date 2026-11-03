@@ -3,6 +3,7 @@
 #include "parser.hpp"
 
 #include <algorithm>
+#include <array>
 #include <sstream>
 #include <utility>
 
@@ -68,15 +69,17 @@ public:
     [[nodiscard]] auto generateProgram() -> std::string;
 
 private:
+    auto generateFun(const node::Fun &fun) -> void;
+
     auto generateStmt(const node::Stmt &stmt) -> void;
 
-    auto generateTerm(const node::Term &term) -> void;
+    //auto generateTerm(const node::Term &term) -> void;
 
     auto generateExpr(const node::Expr &expr) -> void;
 
     auto generateBinExpr(const node::expr::Binary &bin) -> void;
 
-    auto generateScope(const node::Block &scope) -> void;
+    auto generateBlock(const node::Block &block) -> void;
 
     auto generateIfPred(const node::IfPred &ifPred, std::string& endLabel) -> void;
 
@@ -84,9 +87,13 @@ private:
 
     auto pop(const std::string &reg) -> void;
 
-    auto beginScope() -> void;
+    auto mov(const std::string &reg) -> void;
 
-    auto endScope() -> void;
+    auto mov(const std::string &reg1, const std::string &reg2) -> void;
+
+    auto beginBlock() -> void;
+
+    auto endBlock() -> void;
 
     auto makeLabel() -> std::string;
 
@@ -100,5 +107,13 @@ private:
     size_t _stackSize{};
     size_t _labelCount{};
     std::vector<Var> _vars{};
-    std::vector<size_t> _scopes{};
+    std::vector<size_t> _blocks{};
+    std::array<std::string,6> paramRegisters{
+        "rdi",
+        "rsi",
+        "rdx",
+        "rcx",
+        "r8",
+        "r9"
+    };
 };

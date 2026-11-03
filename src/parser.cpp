@@ -72,7 +72,7 @@ auto Parser::parseFun() -> node::Fun { // fun myfun(int x,int y) -> bool { }
     }
     auto block = parseBlock();
     return node::Fun{
-        .funName = node::expr::Ident{funName},
+        .name = node::expr::Ident{funName},
         .params = std::move(params),
         .retType = type,
         .block =std::move(block)
