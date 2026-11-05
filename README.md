@@ -33,3 +33,51 @@ and the compiler was extended well beyond the series with:
 - typed and inferred variable declarations (`def int x = 1;` / `def x = 1;`)
 - source locations (line and column) in every error message
  
+## Language reference
+ 
+The full grammar is in [`docs/grammer.ebnf`](docs/grammer.ebnf).
+ 
+- [Program](#program)
+- [Function](#function)
+- Type
+- Block
+- Statement
+  - Def
+  - Assign
+  - Ret
+  - If / Elif / Else
+  - While
+  - Call statement
+- Expression
+  - Operators and precedence
+  - Literals
+- Comments
+### Program
+ 
+![program](docs/program.svg)
+ 
+A program is a list of one or more functions, and nothing else: no statements or
+variables at the top level. Execution starts at `main`, and its return value becomes
+the process's exit code. A program without a `main` function is rejected.
+ 
+### Function
+ 
+![function](docs/function.svg)
+ 
+```
+fun add(int a, int b) -> int {
+    ret a + b;
+}
+ 
+fun reset() {          // no return type
+    ret;
+}
+```
+ 
+- **Name:** any identifier. Functions may be called before they are defined.
+- **Parameters:** zero or more, each written as a type followed by a name and separated by commas.
+  Parameters are passed in registers, so a function can have at most 6.
+- **Return type:** optional, written after `->`. A function with a return type returns a
+  value with `ret expr;`. A function without one uses a bare `ret;` or simply reaches its closing `}`.
+- **Body:** a block. Parameters behave like local variables declared at the top of it.
+ 
