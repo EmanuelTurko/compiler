@@ -192,13 +192,15 @@ auto Generator::generateLiteral(const node::Literal &literal) -> void {
         Generator& gen;
 
         auto operator()(const node::literal::Bool& bool_) const -> void {
-
+            if (bool_.token.type == TokenType::litBool)
+                gen.mov("rax","1");
+            else gen.mov("rax","0");
         }
         auto operator()(const node::literal::Int& int_) const  -> void {
             gen.mov("rax",int_.token.value.value());
         }
         auto operator()(const node::literal::String& str) const -> void {
-
+            assert(false && "not implemented yet");
         }
     };
 
@@ -244,7 +246,16 @@ auto Generator::generateExpr(const node::Expr &expr) -> void {
             gen.generateLiteral(literal);
         }
         auto operator()(const node::expr::Unary& unary) const -> void {
-            assert(false &&"unary not impleneted");
+            if (unary.op.type == TokenType::minus) {
+                gen.pop("rax");
+                gen._output << "    neg rax\n";
+                gen.push("rax");
+            }
+            if (unary.op.type == TokenType::logicalNot) {
+                gen.pop("rax");
+                gen._output << "    xor rax,1\n";
+                gen.push("rax");
+            }
         }
         auto operator()(const node::expr::Binary &bin) const -> void {
             gen.generateBinExpr(bin);

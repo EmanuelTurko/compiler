@@ -11,7 +11,7 @@ add_executable(hydro src/main.cpp
 target_compile_options(hydro PRIVATE -Wall -Wextra)
 add_custom_target(run
 
-        COMMAND $<TARGET_FILE:hydro> ${CMAKE_SOURCE_DIR}/test.hy
+        COMMAND $<TARGET_FILE:hydro> ${CMAKE_SOURCE_DIR}/test.et
 
         COMMAND sh -c "./out; echo exit code: $?"
 
@@ -25,9 +25,9 @@ add_custom_target(run
 )
 add_custom_target(check
 
-        COMMAND $<TARGET_FILE:hydro> ${CMAKE_SOURCE_DIR}/test.hy
+        COMMAND $<TARGET_FILE:hydro> ${CMAKE_SOURCE_DIR}/test.et
 
-        COMMAND sh -c "./out; echo test.hy exit code: $?"
+        COMMAND sh -c "./out; echo test.et exit code: $?"
 
         COMMAND ${CMAKE_COMMAND} -E env VERBOSE=1 bash ${CMAKE_SOURCE_DIR}/tests/run_edge_cases.sh $<TARGET_FILE:hydro>
 

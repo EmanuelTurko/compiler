@@ -378,7 +378,7 @@ auto Parser::parsePrimary() -> node::Expr {
 
     if (peekIs(TokenType::litInt))
         expr.var = node::Literal{.var = node::literal::Int{.token = consume()}};
-    else if (peekIs(TokenType::kwTrue) || peekIs(TokenType::kwFalse))
+    else if (peekIs(TokenType::kwTrue) || peekIs(TokenType::kwFalse) || peekIs(TokenType::kwBool))
         expr.var = node::Literal{.var = node::literal::Bool{.token = consume()}};
     else if (peekIs(TokenType::ident) && peekIs(TokenType::openParen, 1))
         expr.var = node::expr::Call{parseCall()};

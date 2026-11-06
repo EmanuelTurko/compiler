@@ -1,0 +1,7 @@
+fun add(int a, int b) -> int {
+def int x = a+b;
+ret x;
+}
+fun main() -> int{
+def x =
+}
