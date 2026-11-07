@@ -1,7 +1,10 @@
-fun add(int a, int b) -> int {
-def int x = a+b;
-ret x;
-}
 fun main() -> int{
-def x =
+    def int x = 5;
+    def y = x;
+    def bool z = true;
+
+    if(!z){
+        ret 55;
+    }
+    ret 5;
 }

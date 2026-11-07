@@ -31,8 +31,6 @@ enum class TokenType {
 
 inline auto binPrecedence(const TokenType &type) -> int {
     switch (type) {
-        case TokenType::assign:
-            return 0;
         case TokenType::logicalOr:
             return 1;
         case TokenType::logicalAnd:
@@ -41,9 +39,9 @@ inline auto binPrecedence(const TokenType &type) -> int {
         case TokenType::neq:
             return 3;
         case TokenType::less:
-           case TokenType::greater:
+        case TokenType::greater:
         case TokenType::lessEq:
-            case TokenType::greaterEq:
+        case TokenType::greaterEq:
             return 4;
         case TokenType::plus:
         case TokenType::minus:

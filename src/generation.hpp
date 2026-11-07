@@ -101,6 +101,8 @@ private:
 
     auto generateOp(const TokenType &type) -> std::string;
 
+    auto getVarOffset(const Token &token) -> size_t;
+
     struct Var {
         std::string name{};
         size_t stackLocation{};

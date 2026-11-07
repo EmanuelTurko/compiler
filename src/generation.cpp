@@ -84,9 +84,9 @@ auto Generator::generateFun(const node::Fun& fun) -> void {
         });
     }
     generateBlock(fun.block);
-    mov("rsp","rbp");
+   /* mov("rsp","rbp");
     pop("rbp");
-    _output << "    ret\n\n";
+    _output << "    ret\n\n";*/
 }
 
 
@@ -98,7 +98,6 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
                 if (ret.expr.has_value()) gen.generateExpr(ret.expr.value());
                 else gen.mov("rax","0");
                 gen.pop("rax");
-                gen._output <<";; test\n";
                 gen.mov("rsp","rbp");
                 gen._output << "    pop rbp\n";
                 gen._output << "    ret\n";
@@ -198,6 +197,7 @@ auto Generator::generateLiteral(const node::Literal &literal) -> void {
         }
         auto operator()(const node::literal::Int& int_) const  -> void {
             gen.mov("rax",int_.token.value.value());
+            gen.push("rax");
         }
         auto operator()(const node::literal::String& str) const -> void {
             assert(false && "not implemented yet");
@@ -245,30 +245,45 @@ auto Generator::generateExpr(const node::Expr &expr) -> void {
         auto operator()(const node::Literal& literal) const -> void {
             gen.generateLiteral(literal);
         }
-        auto operator()(const node::expr::Unary& unary) const -> void {
-            if (unary.op.type == TokenType::minus) {
-                gen.pop("rax");
-                gen._output << "    neg rax\n";
-                gen.push("rax");
+
+        auto operator()(const node::expr::Unary &unary) const -> void {
+            std::cout << "unary" << std::endl;
+            gen.generateExpr(*unary.expr);
+            gen.pop("rax");
+            switch (unary.op.type) {
+                case TokenType::minus:
+                    gen._output << "    neg rax\n";
+                    break;
+                case TokenType::logicalNot:
+                    gen._output << "    xor rax,1\n";
+                    break;
+                case TokenType::inc:
+                    gen._output << "    inc rax\n";
+                    if (const auto ident = std::get_if<node::expr::Ident>(&unary.expr->var)) {
+                        std::stringstream ss{};
+                        ss << "QWORD [rsp + " << gen.getVarOffset(ident->token) << "]";
+                        gen.mov(ss.str(), "rax");
+                    } else error("Unexpected unary operand", unary.op.location);
+                    break;
+                case TokenType::dec:
+                    gen._output << "    dec rax\n";
+                    if (const auto ident = std::get_if<node::expr::Ident>(&unary.expr->var)) {
+                        std::stringstream ss{};
+                        ss << "QWORD [rsp + " << gen.getVarOffset(ident->token) << "]";
+                        gen.mov(ss.str(), "rax");
+                    } else error("Unexpected unary operand", unary.op.location);
+                    break;
+                default:
+                    error("Unexpected unary operand", unary.op.location);
             }
-            if (unary.op.type == TokenType::logicalNot) {
-                gen.pop("rax");
-                gen._output << "    xor rax,1\n";
-                gen.push("rax");
-            }
+            gen.push("rax");
         }
         auto operator()(const node::expr::Binary &bin) const -> void {
             gen.generateBinExpr(bin);
         }
         auto operator()(const node::expr::Ident& ident) const -> void {
-            const auto it = std::ranges::find_if(gen._vars,[&](const Var& var)-> bool {
-                return var.name == ident.token.value.value();
-            });
-            if (it == gen._vars.cend())
-                error("Identifier not found",ident.token.location);
-
             std::stringstream ss{};
-            ss << "QWORD [rsp + " << (gen._stackSize - it->stackLocation-1)*8<< "]";
+            ss << "QWORD [rsp + " << gen.getVarOffset(ident.token)<< "]";
             gen.push(ss.str());
         }
         auto operator()(const node::expr::Call& call) const -> void {
@@ -322,7 +337,7 @@ auto Generator::beginBlock() -> void {
 }
 auto Generator::endBlock() -> void {
     const size_t popCount = _vars.size() - _blocks.back();
-    _output << "\n    add rsp, " << popCount*8 << "\n";
+    //_output << "\n    add rsp, " << popCount*8 << "\n";
     _stackSize -= popCount;
     for (size_t i{}; i < popCount; i++) _vars.pop_back();
     _blocks.pop_back();
@@ -332,6 +347,7 @@ auto Generator::makeLabel() -> std::string {
 }
 
 auto Generator::generateOp(const TokenType& type) -> std::string {
+    std::cout<< "GenerateOP called" << std::endl;
     switch (type) {
         case TokenType::plus:
         return "    add rax,rbx\n";
@@ -343,18 +359,58 @@ auto Generator::generateOp(const TokenType& type) -> std::string {
             _output << "    cqo\n";
             return "    idiv rbx\n";
         case TokenType::eq:
+            _output <<"    cmp rax,rbx\n";
+            _output <<"    sete al\n";
+            break;
         case TokenType::neq:
+            _output <<"    cmp rax,rbx\n";
+            _output <<"    setne al\n";
+            break;
         case TokenType::less:
+            _output <<"    cmp rax,rbx\n";
+            _output <<"    setl al\n";
+            break;
         case TokenType::greater:
+            _output <<"    cmp rax,rbx\n";
+            _output <<"    setg al\n";
+            break;
         case TokenType::greaterEq:
+            _output <<"    cmp rax,rbx\n";
+            _output <<"    setge al\n";
+            break;
         case TokenType::lessEq:
+            _output <<"    cmp rax,rbx\n";
+            _output <<"    setle al\n";
+            break;
         case TokenType::logicalAnd:
+            _output <<"    cmp rax,0\n";
+            _output <<"    setne al\n";
+            _output <<"    cmp rbx,0\n";
+            _output <<"    setne bl\n";
+            _output <<"    and al,bl\n";
+            break;
         case TokenType::logicalOr:
-        case TokenType::logicalNot:
-        case TokenType::inc:
-        case TokenType::dec:
+            _output <<"    cmp rax,0\n";
+            _output <<"    setne al\n";
+            _output <<"    cmp rbx,0\n";
+            _output <<"    setne bl\n";
+            _output <<"    or al,bl\n";
+            break;
         case TokenType::percent:
+            _output << "    cqo\n";
+            _output << "    idiv rbx\n";
+            return "    mov rax,rdx";
         default:
-            return "";
+            error("Expected a valid binary operator",Location());
     }
+    return "    movzx rax,al\n"; // used for logicalAND/OR and comparison greater/less than eq
+}
+auto Generator::getVarOffset(const Token& token)->size_t {
+    const auto it = std::ranges::find_if(_vars,[&](const Var& var)-> bool {
+            return var.name == token.value.value();
+        });
+    if (it == _vars.cend())
+        error("Identifier not found",token.location);
+
+    return (_stackSize - it->stackLocation-1)*8;
 }
