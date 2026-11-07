@@ -122,6 +122,24 @@ auto Parser::tryParseStmt() -> optional<Stmt> {
         return Stmt{.var = parseDef()};
     if (peekIs(TokenType::ident) && peekIs(TokenType::assign,1))
         return Stmt{.var = parseAssign()};
+    if (isPrefixStmt()) {
+        auto expr = parsePrimary();
+        tryConsume(TokenType::semi, "expected ';'");
+        return Stmt{.var = node::stmt::ExprStmt{.expr = std::move(expr)}};
+    }
+    if (isPostfixStmt()) {
+        const auto ident = consume();
+        const auto op = consume();
+        tryConsume(TokenType::semi, "expected ';'");
+        return Stmt{
+            .var = node::stmt::ExprStmt{
+                . expr = node::Expr{node::expr::Unary{
+                    .op = op,
+                    .expr = make_unique<Expr>(node::Expr{
+                        .var = node::expr::Ident{
+                            .token = ident}})}
+                }}};
+    }
     if (peekIs(TokenType::ident) && peekIs(TokenType::openParen,1))
         return Stmt{.var = parseExprStmt()};
 
@@ -222,8 +240,8 @@ auto Parser::parseAssign() -> node::stmt::Assign {
 }
 
 auto Parser::parseExprStmt() -> node::stmt::ExprStmt {
-    auto exprStmt = node::stmt::ExprStmt{.call = parseCall()};
-    tryConsume(TokenType::semi,"Expected ';'");
+    auto exprStmt = node::stmt::ExprStmt{.expr = node::Expr{.var = parseCall()}};
+    tryConsume(TokenType::semi, "Expected ';'");
     return exprStmt;
 }
 
@@ -384,7 +402,7 @@ auto Parser::parsePrimary() -> node::Expr {
         expr.var = node::expr::Call{parseCall()};
     else if (peekIs(TokenType::ident))
         expr.var = node::expr::Ident{.token = consume()};
-    else if (peekIs(TokenType::minus) || peekIs(TokenType::logicalNot))
+    else if (peekIs(TokenType::minus) || peekIs(TokenType::logicalNot) || peekIs(TokenType::inc) || peekIs(TokenType::dec))
         expr.var = node::expr::Unary{.op = consume(), .expr = make_unique<node::Expr>(parsePrimary())};
     else if (peekIs(TokenType::openParen)) {
         consume();
@@ -395,6 +413,13 @@ auto Parser::parsePrimary() -> node::Expr {
     return expr;
 }
 
+auto Parser::isPrefixStmt() -> bool {
+    return (peekIs(TokenType::inc) || peekIs(TokenType::dec)) && peekIs(TokenType::ident,1);
+}
+
+auto Parser::isPostfixStmt() -> bool {
+    return peekIs(TokenType::ident) && (peekIs(TokenType::inc, 1) || peekIs(TokenType::dec, 1));
+}
 
 
 

@@ -137,22 +137,36 @@ auto Generator::generateStmt(const node::Stmt &stmt) -> void {
             gen.generateExpr(if_.cond);
             gen.pop("rax");
 
-            auto label = gen.makeLabel();
-            gen._output << "    test rax, rax\n";
-            gen._output << "    jz " << label << "\n";
+            auto entryLabel = gen.makeLabel();
             auto endLabel = gen.makeLabel();
+            gen._output << "    test rax, rax\n";
+            gen._output << "    jz " << entryLabel << "\n";
+
             gen.generateBlock(if_.block);
             gen._output << "    jmp " << endLabel << "\n";
-            gen._output << label << ":\n";
+            gen._output << entryLabel << ":\n";
             if (if_.next)
                 gen.generateIfPred(*if_.next, endLabel);
             gen._output << endLabel << ":\n";
         }
         auto operator()(const node::stmt::While &while_) const ->void{
-            assert("while not impleneted");
+            const auto entryLabel = gen.makeLabel();
+            const auto endLabel = gen.makeLabel();
+
+            gen._output << entryLabel << ":\n";
+            gen.generateExpr(while_.cond);
+            gen.pop("rax");
+            gen._output << "    cmp rax,0" << "\n";
+            gen._output << "    jz " << endLabel << "\n";
+            gen.generateBlock(while_.block);
+            gen._output << "    jmp " << entryLabel << "\n";
+            //if we are here call while function
+            gen._output << endLabel << ":\n";
+
         }
         auto operator()(const node::stmt::ExprStmt& exprStmt) const -> void {
-            assert("exprstmt not impleneted");
+            gen.generateExpr(exprStmt.expr);
+            gen.pop("rax");
         }
     };
 

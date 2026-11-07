@@ -1,10 +1,8 @@
 fun main() -> int{
-    def int x = 5;
-    def y = x;
-    def bool z = true;
+    def int x = 9;
 
-    if(!z){
-        ret 55;
+    while(x < 15){
+        ++x;
     }
-    ret 5;
+    ret x;
 }

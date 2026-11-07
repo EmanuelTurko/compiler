@@ -102,6 +102,7 @@ private:
         {"string", TokenType::kwString},
         {"true", TokenType::kwTrue},
         {"false", TokenType::kwFalse},
+        {"while", TokenType::kwWhile},
     };
     inline static const std::unordered_map<char, TokenType> _symbols= {
         {'(', TokenType::openParen},

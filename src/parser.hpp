@@ -115,7 +115,7 @@ namespace node {
         };
 
         struct ExprStmt {
-            expr::Call call;
+            Expr expr;
         };
     }
 
@@ -170,6 +170,11 @@ private:
     auto parseExpr() -> node::Expr;
     auto tryParseExpr(int minPrecedence = 0) -> optional<node::Expr>;
     auto parsePrimary() -> node::Expr;
+
+    auto isPrefixStmt() -> bool;
+
+    auto isPostfixStmt() -> bool;
+
     auto parseCall() -> node::expr::Call;
 
     // Token consume methods
